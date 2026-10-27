@@ -51,7 +51,10 @@ Mitigation: the API serves only **derived** values (voto, fantavoto, breakdown) 
 ### 2.3 Database: **Postgres 16+** (chosen)
 JSONB for raw payloads and breakdowns, a single SQL dialect, and concurrent ingest and serve. Migrations use goose, embedded in the binary. Queries are generated with sqlc on pgx/v5. Dev and tests use Postgres from the Nix devshell or docker compose.
 
-### 2.4 Rule sets as data
+### 2.4 Rule sets as data (interim)
+> The rule set format below is the **interim** Classic scorer. It will be replaced by the
+> per-league settings format in §9; the engine is generalized, not removed.
+
 - File: `rulesets/classic.yaml`, validated against `rulesets/schema.json`. Each file has an id (`classic`) and a semver `version`.
 - **All values are integer hundredths** (`goal: 300` = +3.00), to keep results deterministic with no floats anywhere.
 - Classic v1.0.0 keys: `goal`, `penalty_scored`, `penalty_missed`, `penalty_saved`, `own_goal`, `assist`, `yellow_card`, `red_card`, `red_replaces_yellow`, `gk_goal_conceded`, `gk_clean_sheet`, `gk_clean_sheet_min_minutes`, plus a `senza_voto` policy: `min_minutes`, and the voto d'ufficio given when an s.v. player has an event (e.g. goal → 600, red card → 400).
@@ -140,7 +143,69 @@ type Normalizer interface { Normalize(p RawPayload) (domain.MatchFacts, error) }
 1. **Sportmonks plan:** Serie A isn't on the free plan. Will you take the Starter plan or the 14-day trial? A token is needed to record fixtures and for the DoD real-matchday run.
 2. **Player rating availability:** confirm that rating (118) is included in the chosen plan. If not, voto falls back to s.v. for everyone, and we need a different VotoSource.
 3. **Redistribution:** read the Sportmonks ToS (or ask them) before any public deployment of provider-rating-based voti.
-4. **Classic defaults:** confirm the s.v. policy (voto d'ufficio 6 for a goal, 4 for a red card), the clean-sheet minimum minutes (proposed: any minutes, with 0 conceded while on pitch), and the penalty-scored value (proposed 300, same as goal).
+4. **Classic defaults (interim scorer only):** confirm the s.v. policy (voto d'ufficio 6 for a goal, 4 for a red card), the clean-sheet minimum minutes (proposed: any minutes, with 0 conceded while on pitch), and the penalty-scored value (proposed 300, same as goal).
 5. **Licence:** proposed Apache-2.0 for code (patent grant, friendly to third-party protocol implementers).
 6. **Target season** for the real-matchday demo (proposed: current Serie A 2026/27).
 
+
+## 8. Leagues (design, not built yet)
+
+**Principle: the server is the source of truth for every league.** Clients author settings, line-ups and market actions. The server validates them, computes fantavoti and team results, and serves the same deterministic outcome to every member, whatever client they use.
+
+- **Entities:** league (name, season, invite code), members with roles (owner / admin / member), one fantasy team per member, rosters, matchday line-ups, competitions (league, cups).
+- **Line-ups** lock at the first kickoff of each matchday. The server enforces this from fixture kickoff times.
+- **Matchday lifecycle:** open → closed. On close, every input (ratings, events, line-ups, the settings version in force) is frozen into a hashed snapshot. Provider corrections after close are ignored.
+- **Rule changes are never retroactive.** A new settings version applies only from an open matchday.
+- **Closed-matchday corrections:** the owner or an admin can manually fix a closed matchday (a player's voto or event, a team score, a result). Each fix is an append-only, attributed entry (old → new, reason, time), visible to every member. It is applied as a layer on top of the frozen snapshot, and triggers a visible recompute of that matchday and the standings after it.
+- **Auth:** OpenID Connect. Users sign in with an external identity provider; the server verifies bearer tokens and keys users by issuer + subject. No passwords are stored. League roles (authorization) are OpenFanta's own.
+- **Privacy:** store only the identity reference and a display name. On account deletion, pseudonymize the user ("deleted user", opaque ID), so the audit log stays intact.
+- **Write API conventions:** `ETag` + `If-Match` for optimistic concurrency (a stale save gets `412`); an `Idempotency-Key` header so retried actions (a line-up submission, a trade acceptance) are not applied twice; `application/problem+json` errors.
+
+## 9. League settings format (design, not built yet)
+
+Research behind this section: [docs/research/league-settings/](research/league-settings/report.md).
+
+**Finding:** fantacalcio rules vary widely but shallowly. Almost every rule is one of a few shapes with parameters: per-event values with per-role overrides, band tables (modificatore difesa, captain), goal-threshold lists (fasce gol), zero-sum duels (modificatore centrocampo), score corrections, ordered tie-breakers. Substitution logic (Classic modes, Mantra Basic/Easy/Master) is algorithmic: it lives in engine code and leagues select it by name.
+
+**Scoring pipeline.** Each stage has a catalog of typed modules:
+
+| Stage | Depends on | Examples |
+|---|---|---|
+| 0. Real-match exceptions | the real fixture | postponed / suspended match policy |
+| 1. Player fantavoto | the player (+ real match context) | bonus/malus by role, assist variants, gol decisivo, voto rounding, senza voto / voto d'ufficio |
+| 2. Line-up resolution | own line-up | formations, bench, substitution algorithm, Mantra out-of-position malus, riserva d'ufficio |
+| 3. Team modifiers | own line-up | modificatore difesa, captain, fair play |
+| 4. Opponent and calendar | opponent, calendar | fattore campo, modificatore centrocampo, fasce gol, draw / superiority corrections |
+| 5. Competition | whole league | head-to-head, total points, Formula 1, cups, tie-breakers |
+
+Roster and market rules (quotas, budget, auction type) only validate actions; they never affect scores, and they version separately from scoring.
+
+**Document rules:**
+- `schema` versions the document shape: additive within a major version, new fields have defaults that keep the old meaning, and names are never reused.
+- `engine` versions the semantics (tie-breaks, substitution algorithms, the expression environment) and is pinned per settings version, so an engine bug fix never silently changes old results. Adopting a new engine is an explicit, logged settings change.
+- `requires` lists the features a document uses; a server that lacks one rejects the document instead of misreading it.
+- Unknown keys inside scoring modules are rejected. Client UI data goes in `meta` / `x-*`, which the engine ignores and preserves verbatim. The server stores the canonical submitted JSON, not a re-marshalled struct.
+- An optional **CEL** expression module is the escape hatch for custom rules: integer-only results, type-checked at submission, cost-limited, in a frozen environment pinned by `engine`.
+
+**Determinism rules:** all values are integer hundredths; band checks compare sums (`sum ≥ from × n`) and never divide; bands use ascending lower bounds only; every "best N" selection names a tie-break; voto and fantavoto rounding (mode and step) is an explicit league setting.
+
+**Versioning and audit:** settings are stored in append-only `settings_versions` (league, seq, canonical JSON, sha256, prev_sha256, schema, engine, effective_from_matchday, author, reason). They are hash-chained, so a client that caches the head hash can detect rewritten history. Results are immutable rows keyed by (settings hash, input snapshot hash, engine version). Every result carries an explain trace (which module added how many hundredths), and every recompute publishes a member-visible diff. Stage-1 fantavoti can be computed once and shared across leagues with identical player settings and inputs; the efficiency gain must be benchmarked before relying on it.
+
+A full example document (a Classic league, and how Mantra fits the same structure) is in the research report.
+
+**Still open:**
+1. When does a matchday close: automatically (e.g. last fixture final + N hours), or by an admin action?
+2. Do vice-admins get admin powers (settings changes, corrections), or a subset?
+3. Ship the CEL module in v1, or after the module catalog stabilizes?
+4. How long must old engine versions stay executable (forever, or N seasons)?
+5. Ratings and events copied into the hashed snapshot (recommended), or referenced from the provider?
+6. Is a hash chain enough tamper evidence, or are signed exports / a Merkle log needed for third-party-hosted instances?
+7. Which OIDC providers to accept first, and are magic links needed too?
+
+## 10. Decision log
+
+- **2026-10-27: base voto at two-decimal precision.** `voto` is the provider rating unrounded (`6.38`). Rounding moved from the voto source into league settings.
+- **2026-10-27: the server is the source of truth for leagues** and computes fantavoti from per-league settings (a brief proposal to compute fantavoti on clients was dropped, because members using different clients must get identical results).
+- **2026-10-27: no retroactive rule changes**; closed matchdays change only through logged owner/admin corrections; all inputs freeze at matchday close.
+- **2026-10-27: rounding is a league setting**; stage-1 results may be shared across leagues, pending a benchmark.
+- **2026-10-27: settings format direction:** typed versioned modules plus a CEL escape hatch, hash-chained settings history (§9).

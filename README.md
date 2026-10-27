@@ -96,7 +96,9 @@ GET /v1/rulesets            GET /v1/rulesets/{id}/versions/{version}
 GET /healthz                GET /readyz
 ```
 
-Scores are decimal strings (`"6.5"`), never floats. Errors are RFC 9457
+Scores are decimal strings with two digits (`"6.38"`), never floats. `voto` is the provider
+rating unrounded; each score also carries the player's match `stats` (goals, assists, cards,
+goals conceded, ...). Errors are RFC 9457
 `application/problem+json`. Responses carry an `ETag` for conditional requests.
 
 ## Changing bonus and malus values
@@ -164,6 +166,13 @@ rulesets/             built-in rule sets and their JSON Schema
 
 Generated code (`internal/store/db`, `internal/api/gen.go`) is committed. After changing SQL or
 the spec, run `make gen`.
+
+## Roadmap: leagues
+
+The server will host leagues and compute every league's fantavoti from its own settings, so all
+members get identical results whatever client they use. The design (settings format, audit log,
+matchday lifecycle, auth) is in [docs/design.md](docs/design.md) §8–10, backed by the research in
+[docs/research/league-settings/](docs/research/league-settings/report.md).
 
 ## Status and open questions
 
