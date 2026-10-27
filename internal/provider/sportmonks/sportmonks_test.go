@@ -256,7 +256,7 @@ func TestRetryAfterFromBody(t *testing.T) {
 	cases := map[string]time.Duration{
 		`{"retry_after": 12}`:                      12 * time.Second,
 		`{"rate_limit":{"resets_in_seconds": 30}}`: 30 * time.Second,
-		`not json`:                                 0,
+		`not json`: 0,
 	}
 	for body, want := range cases {
 		if got := retryAfter(nil, []byte(body)); got != want {

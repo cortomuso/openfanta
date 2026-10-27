@@ -124,6 +124,21 @@ func (s *Store) LatestRaw(ctx context.Context, provider, requestKey string) (Raw
 	}, nil
 }
 
+// RawByID returns a stored payload by row ID.
+func (s *Store) RawByID(ctx context.Context, id int64) (RawPayload, error) {
+	r, err := s.q.GetRawPayload(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return RawPayload{}, ErrNotFound
+	}
+	if err != nil {
+		return RawPayload{}, err
+	}
+	return RawPayload{
+		ID: r.ID, Provider: r.Provider, RequestKey: r.RequestKey, Status: int(r.HttpStatus),
+		Body: r.Body, FetchedAt: r.LastSeenAt,
+	}, nil
+}
+
 // Resolve returns the OpenFanta ID for a provider entity, creating one if new.
 func Resolve(ctx context.Context, q *db.Queries, provider, entity, externalID string) (uuid.UUID, error) {
 	id, err := q.GetRef(ctx, db.GetRefParams{Provider: provider, Entity: entity, ExternalID: externalID})
@@ -164,11 +179,12 @@ func (s *Store) SyncRuleSets(ctx context.Context, sets []*rules.RuleSet) error {
 
 // Facts is a stored fixture_facts row.
 type Facts struct {
-	ID         int64
-	FixtureID  uuid.UUID
-	Facts      domain.MatchFacts
-	Hash       string
-	Normalizer string
+	ID            int64
+	FixtureID     uuid.UUID
+	Facts         domain.MatchFacts
+	Hash          string
+	Normalizer    string
+	RawPayloadIDs []int64
 }
 
 // SaveFacts stores normalized facts for a fixture, deduplicated by content.
@@ -185,7 +201,7 @@ func (s *Store) SaveFacts(ctx context.Context, fixtureID uuid.UUID, facts domain
 	if err != nil {
 		return Facts{}, fmt.Errorf("save facts: %w", err)
 	}
-	return Facts{ID: id, FixtureID: fixtureID, Facts: facts, Hash: hash, Normalizer: normalizer}, nil
+	return Facts{ID: id, FixtureID: fixtureID, Facts: facts, Hash: hash, Normalizer: normalizer, RawPayloadIDs: rawIDs}, nil
 }
 
 // LatestFacts returns the most recently stored facts for a fixture.
@@ -201,7 +217,9 @@ func (s *Store) LatestFacts(ctx context.Context, fixtureID uuid.UUID) (Facts, er
 	if err := json.Unmarshal(r.Facts, &f); err != nil {
 		return Facts{}, fmt.Errorf("decode facts %d: %w", r.ID, err)
 	}
-	return Facts{ID: r.ID, FixtureID: r.FixtureID, Facts: f, Hash: r.FactsHash, Normalizer: r.Normalizer}, nil
+	return Facts{
+		ID: r.ID, FixtureID: r.FixtureID, Facts: f, Hash: r.FactsHash, Normalizer: r.Normalizer, RawPayloadIDs: r.RawPayloadIds,
+	}, nil
 }
 
 // RunInput describes one computation to record.

@@ -88,3 +88,17 @@ INSERT INTO player_scores (
 -- name: SetCurrentRun :exec
 INSERT INTO current_runs (fixture_id, rule_set_id, voto_source, run_id) VALUES ($1, $2, $3, $4)
 ON CONFLICT (fixture_id, rule_set_id, voto_source) DO UPDATE SET run_id = EXCLUDED.run_id;
+
+-- name: GetRawPayload :one
+SELECT * FROM raw_payloads WHERE id = $1;
+
+-- name: FixturesWithFacts :many
+-- Fixtures that have normalized facts, optionally limited to one season.
+SELECT DISTINCT f.id FROM fixtures f
+JOIN fixture_facts ff ON ff.fixture_id = f.id
+JOIN matchdays m ON m.id = f.matchday_id
+WHERE sqlc.narg(season_id)::uuid IS NULL OR m.season_id = sqlc.narg(season_id)::uuid
+ORDER BY f.id;
+
+-- name: FixtureMatchday :one
+SELECT matchday_id FROM fixtures WHERE id = $1;

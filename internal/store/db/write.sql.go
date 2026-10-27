@@ -36,6 +36,66 @@ func (q *Queries) CurrentRun(ctx context.Context, arg CurrentRunParams) (Current
 	return i, err
 }
 
+const fixtureMatchday = `-- name: FixtureMatchday :one
+SELECT matchday_id FROM fixtures WHERE id = $1
+`
+
+func (q *Queries) FixtureMatchday(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, fixtureMatchday, id)
+	var matchday_id uuid.UUID
+	err := row.Scan(&matchday_id)
+	return matchday_id, err
+}
+
+const fixturesWithFacts = `-- name: FixturesWithFacts :many
+SELECT DISTINCT f.id FROM fixtures f
+JOIN fixture_facts ff ON ff.fixture_id = f.id
+JOIN matchdays m ON m.id = f.matchday_id
+WHERE $1::uuid IS NULL OR m.season_id = $1::uuid
+ORDER BY f.id
+`
+
+// Fixtures that have normalized facts, optionally limited to one season.
+func (q *Queries) FixturesWithFacts(ctx context.Context, seasonID *uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, fixturesWithFacts, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRawPayload = `-- name: GetRawPayload :one
+SELECT id, provider, request_key, sha256, http_status, body, fetched_at, last_seen_at FROM raw_payloads WHERE id = $1
+`
+
+func (q *Queries) GetRawPayload(ctx context.Context, id int64) (RawPayload, error) {
+	row := q.db.QueryRow(ctx, getRawPayload, id)
+	var i RawPayload
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.RequestKey,
+		&i.Sha256,
+		&i.HttpStatus,
+		&i.Body,
+		&i.FetchedAt,
+		&i.LastSeenAt,
+	)
+	return i, err
+}
+
 const getRef = `-- name: GetRef :one
 SELECT entity_id FROM provider_refs
 WHERE provider = $1 AND entity = $2 AND external_id = $3

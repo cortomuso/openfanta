@@ -6,3 +6,9 @@ linters:
     - misspell
     - revive
     - unconvert
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln

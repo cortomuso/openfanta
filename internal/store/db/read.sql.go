@@ -64,3 +64,79 @@ func (q *Queries) FixtureRuns(ctx context.Context, fixtureID uuid.UUID) ([]Fixtu
 	}
 	return items, nil
 }
+
+const fixtureScores = `-- name: FixtureScores :many
+SELECT ps.player_id, p.name AS player_name, ps.team_id, t.name AS team_name, ps.role, ps.minutes,
+       ps.voto, ps.fantavoto, ps.senza_voto, ps.voto_ufficio, ps.breakdown,
+       r.id AS run_id, r.rule_set_id, r.rule_set_version, r.voto_source, r.created_at AS computed_at
+FROM current_runs cr
+JOIN computation_runs r ON r.id = cr.run_id
+JOIN player_scores ps ON ps.run_id = r.id
+JOIN players p ON p.id = ps.player_id
+JOIN teams t ON t.id = ps.team_id
+WHERE cr.fixture_id = $1 AND cr.rule_set_id = $2 AND cr.voto_source = $3
+ORDER BY t.name, p.name, ps.player_id
+`
+
+type FixtureScoresParams struct {
+	FixtureID  uuid.UUID
+	RuleSetID  string
+	VotoSource string
+}
+
+type FixtureScoresRow struct {
+	PlayerID       uuid.UUID
+	PlayerName     string
+	TeamID         uuid.UUID
+	TeamName       string
+	Role           string
+	Minutes        int32
+	Voto           *int32
+	Fantavoto      *int32
+	SenzaVoto      bool
+	VotoUfficio    bool
+	Breakdown      []byte
+	RunID          uuid.UUID
+	RuleSetID      string
+	RuleSetVersion string
+	VotoSource     string
+	ComputedAt     time.Time
+}
+
+// Current scores for one fixture under a rule set family and voto source.
+func (q *Queries) FixtureScores(ctx context.Context, arg FixtureScoresParams) ([]FixtureScoresRow, error) {
+	rows, err := q.db.Query(ctx, fixtureScores, arg.FixtureID, arg.RuleSetID, arg.VotoSource)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FixtureScoresRow
+	for rows.Next() {
+		var i FixtureScoresRow
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.PlayerName,
+			&i.TeamID,
+			&i.TeamName,
+			&i.Role,
+			&i.Minutes,
+			&i.Voto,
+			&i.Fantavoto,
+			&i.SenzaVoto,
+			&i.VotoUfficio,
+			&i.Breakdown,
+			&i.RunID,
+			&i.RuleSetID,
+			&i.RuleSetVersion,
+			&i.VotoSource,
+			&i.ComputedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

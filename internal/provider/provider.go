@@ -12,7 +12,7 @@ import (
 
 // Raw is one upstream response, stored verbatim before parsing.
 type Raw struct {
-	Key       string // stable cache key for the request, e.g. "fixtures/19134512"
+	Key       string // request path, for diagnostics only; storage uses its own keys
 	Status    int
 	Body      []byte
 	FetchedAt time.Time

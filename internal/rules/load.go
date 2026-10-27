@@ -129,6 +129,33 @@ func LoadFS(fsys fs.FS) (*Registry, error) {
 	return reg, nil
 }
 
+// Merge combines registries. The same id@version in two registries is an error.
+func Merge(regs ...*Registry) (*Registry, error) {
+	out := &Registry{byKey: map[string]*RuleSet{}}
+	for _, r := range regs {
+		for k, rs := range r.byKey {
+			if _, dup := out.byKey[k]; dup {
+				return nil, fmt.Errorf("%w: duplicate rule set %s", ErrInvalid, k)
+			}
+			out.byKey[k] = rs
+		}
+	}
+	return out, nil
+}
+
+// LatestOfEach returns the highest version of every rule set family, ordered by id.
+func (r *Registry) LatestOfEach() []*RuleSet {
+	var out []*RuleSet
+	for _, rs := range r.All() {
+		if n := len(out); n > 0 && out[n-1].ID == rs.ID {
+			out[n-1] = rs // All is sorted by version within an id
+			continue
+		}
+		out = append(out, rs)
+	}
+	return out
+}
+
 // LoadBuiltin loads the rule sets embedded in the binary.
 func LoadBuiltin() (*Registry, error) { return LoadFS(rulesets.FS) }
 

@@ -174,3 +174,22 @@ func TestRegistryAllOrdersByID(t *testing.T) {
 		t.Errorf("All() = %s, %s", all[0].ID, all[1].ID)
 	}
 }
+
+func TestMergeAndLatestOfEach(t *testing.T) {
+	a, _ := LoadFS(fstest.MapFS{"a.yaml": {Data: []byte(valid)}})
+	b, _ := LoadFS(fstest.MapFS{
+		"b.yaml": {Data: []byte(strings.Replace(valid, "1.2.3", "2.0.0", 1))},
+		"c.yaml": {Data: []byte(strings.Replace(valid, "id: test", "id: alpha", 1))},
+	})
+	m, err := Merge(a, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest := m.LatestOfEach()
+	if len(latest) != 2 || latest[0].Key() != "alpha@1.2.3" || latest[1].Key() != "test@2.0.0" {
+		t.Errorf("latest = %v, %v", latest[0].Key(), latest[1].Key())
+	}
+	if _, err := Merge(a, a); !errors.Is(err, ErrInvalid) {
+		t.Errorf("merge duplicate: %v", err)
+	}
+}
