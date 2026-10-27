@@ -1,0 +1,216 @@
+{
+  "Ref": "5001",
+  "Final": true,
+  "Status": "FT",
+  "Kickoff": "2026-08-23T18:45:00Z",
+  "Home": {
+    "Ref": "100",
+    "Name": "Home FC"
+  },
+  "Away": {
+    "Ref": "200",
+    "Name": "Away FC"
+  },
+  "Players": {
+    "1001": "Home Keeper",
+    "1002": "Home Striker",
+    "1003": "Home Winger",
+    "1004": "Home Midfielder",
+    "1005": "Home Defender",
+    "1012": "Home Reserve Keeper",
+    "1013": "Home Super Sub",
+    "2001": "Away Keeper",
+    "2002": "Away Defender",
+    "2003": "Away Striker",
+    "2004": "Away Winger",
+    "2005": "Away Centre Back",
+    "2006": "Away Reserve Keeper",
+    "2007": "Away Unused"
+  },
+  "Facts": {
+    "home_team": "100",
+    "away_team": "200",
+    "length": 90,
+    "appearances": [
+      {
+        "player": "1001",
+        "team": "100",
+        "role": "goalkeeper",
+        "starter": true,
+        "rating": 690
+      },
+      {
+        "player": "1002",
+        "team": "100",
+        "role": "outfield",
+        "starter": true,
+        "rating": 810
+      },
+      {
+        "player": "1003",
+        "team": "100",
+        "role": "outfield",
+        "starter": true,
+        "rating": 700
+      },
+      {
+        "player": "1004",
+        "team": "100",
+        "role": "outfield",
+        "starter": true,
+        "rating": 560
+      },
+      {
+        "player": "1005",
+        "team": "100",
+        "role": "outfield",
+        "starter": true,
+        "rating": 540
+      },
+      {
+        "player": "1012",
+        "team": "100",
+        "role": "goalkeeper",
+        "starter": false
+      },
+      {
+        "player": "1013",
+        "team": "100",
+        "role": "outfield",
+        "starter": false,
+        "rating": 724
+      },
+      {
+        "player": "2001",
+        "team": "200",
+        "role": "goalkeeper",
+        "starter": true,
+        "rating": 630
+      },
+      {
+        "player": "2002",
+        "team": "200",
+        "role": "outfield",
+        "starter": true,
+        "rating": 500
+      },
+      {
+        "player": "2003",
+        "team": "200",
+        "role": "outfield",
+        "starter": true,
+        "rating": 625
+      },
+      {
+        "player": "2004",
+        "team": "200",
+        "role": "outfield",
+        "starter": true,
+        "rating": 600
+      },
+      {
+        "player": "2005",
+        "team": "200",
+        "role": "outfield",
+        "starter": true,
+        "rating": 550
+      },
+      {
+        "player": "2006",
+        "team": "200",
+        "role": "goalkeeper",
+        "starter": false,
+        "rating": 600
+      },
+      {
+        "player": "2007",
+        "team": "200",
+        "role": "outfield",
+        "starter": false
+      }
+    ],
+    "events": [
+      {
+        "seq": 1,
+        "minute": 12,
+        "kind": "goal",
+        "team": "100",
+        "player": "1002",
+        "related": "1003"
+      },
+      {
+        "seq": 2,
+        "minute": 20,
+        "kind": "yellow_card",
+        "team": "200",
+        "player": "2002"
+      },
+      {
+        "seq": 3,
+        "minute": 30,
+        "kind": "penalty_goal",
+        "team": "200",
+        "player": "2003"
+      },
+      {
+        "seq": 4,
+        "minute": 38,
+        "kind": "penalty_missed",
+        "team": "100",
+        "player": "1004"
+      },
+      {
+        "seq": 5,
+        "minute": 60,
+        "kind": "substitution",
+        "team": "100",
+        "player": "1003",
+        "related": "1013"
+      },
+      {
+        "seq": 6,
+        "minute": 62,
+        "kind": "second_yellow",
+        "team": "200",
+        "player": "2002"
+      },
+      {
+        "seq": 7,
+        "minute": 70,
+        "kind": "penalty_saved",
+        "team": "200",
+        "player": "2003"
+      },
+      {
+        "seq": 8,
+        "minute": 75,
+        "kind": "own_goal",
+        "team": "200",
+        "player": "2005"
+      },
+      {
+        "seq": 9,
+        "minute": 80,
+        "kind": "substitution",
+        "team": "200",
+        "player": "2001",
+        "related": "2006"
+      },
+      {
+        "seq": 10,
+        "minute": 88,
+        "kind": "red_card",
+        "team": "100",
+        "player": "1005"
+      },
+      {
+        "seq": 11,
+        "minute": 90,
+        "kind": "goal",
+        "team": "100",
+        "player": "1013",
+        "related": "1002"
+      }
+    ]
+  }
+}

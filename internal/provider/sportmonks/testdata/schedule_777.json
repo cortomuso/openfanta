@@ -1,0 +1,69 @@
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "Regular Season",
+      "season_id": 777,
+      "type_id": 223,
+      "rounds": [
+        {
+          "id": 3001,
+          "name": "1",
+          "season_id": 777,
+          "finished": true,
+          "fixtures": [
+            {
+              "id": 5002,
+              "round_id": 3001,
+              "name": "x",
+              "state_id": 5,
+              "starting_at": "2026-08-23 18:45:00"
+            },
+            {
+              "id": 5001,
+              "round_id": 3001,
+              "name": "x",
+              "state_id": 5,
+              "starting_at": "2026-08-23 18:45:00"
+            }
+          ]
+        },
+        {
+          "id": 3002,
+          "name": "2",
+          "season_id": 777,
+          "finished": false,
+          "fixtures": [
+            {
+              "id": 5003,
+              "round_id": 3002,
+              "name": "x",
+              "state_id": 5,
+              "starting_at": "2026-08-23 18:45:00"
+            }
+          ]
+        },
+        {
+          "id": 3999,
+          "name": "Relegation Play-off",
+          "season_id": 777,
+          "finished": false,
+          "fixtures": [
+            {
+              "id": 5999,
+              "round_id": 3999,
+              "name": "x",
+              "state_id": 5,
+              "starting_at": "2026-08-23 18:45:00"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rate_limit": {
+    "resets_in_seconds": 3600,
+    "remaining": 2998,
+    "requested_entity": "Schedule"
+  }
+}

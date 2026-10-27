@@ -1,0 +1,801 @@
+{
+  "data": {
+    "id": 5001,
+    "sport_id": 1,
+    "league_id": 384,
+    "season_id": 777,
+    "stage_id": 1,
+    "round_id": 3001,
+    "state_id": 5,
+    "venue_id": 1,
+    "name": "Home FC vs Away FC",
+    "starting_at": "2026-08-23 18:45:00",
+    "result_info": "Home FC won after full-time.",
+    "leg": "1/1",
+    "details": null,
+    "length": 90,
+    "placeholder": false,
+    "has_odds": true,
+    "starting_at_timestamp": 1787510700,
+    "state": {
+      "id": 5,
+      "state": "FT",
+      "name": "Full Time",
+      "short_name": "FT",
+      "developer_name": "FT"
+    },
+    "participants": [
+      {
+        "id": 200,
+        "sport_id": 1,
+        "country_id": 251,
+        "name": "Away FC",
+        "short_code": "AWY",
+        "meta": {
+          "location": "away",
+          "winner": false,
+          "position": 2
+        }
+      },
+      {
+        "id": 100,
+        "sport_id": 1,
+        "country_id": 251,
+        "name": "Home FC",
+        "short_code": "HOM",
+        "meta": {
+          "location": "home",
+          "winner": true,
+          "position": 1
+        }
+      }
+    ],
+    "lineups": [
+      {
+        "id": 7007,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 1001,
+        "team_id": 100,
+        "position_id": 24,
+        "formation_field": null,
+        "type_id": 11,
+        "formation_position": null,
+        "player_name": "Home Keeper",
+        "jersey_number": 1,
+        "details": [
+          {
+            "id": 10011,
+            "player_id": 1001,
+            "type_id": 118,
+            "data": {
+              "value": 6.9
+            }
+          },
+          {
+            "id": 10012,
+            "player_id": 1001,
+            "type_id": 119,
+            "data": {
+              "value": 90
+            }
+          }
+        ]
+      },
+      {
+        "id": 7014,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 1002,
+        "team_id": 100,
+        "position_id": 27,
+        "formation_field": null,
+        "type_id": 11,
+        "formation_position": null,
+        "player_name": "Home Striker",
+        "jersey_number": 2,
+        "details": [
+          {
+            "id": 10021,
+            "player_id": 1002,
+            "type_id": 118,
+            "data": {
+              "value": 8.1
+            }
+          },
+          {
+            "id": 10022,
+            "player_id": 1002,
+            "type_id": 119,
+            "data": {
+              "value": 90
+            }
+          }
+        ]
+      },
+      {
+        "id": 7021,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 1003,
+        "team_id": 100,
+        "position_id": 26,
+        "formation_field": null,
+        "type_id": 11,
+        "formation_position": null,
+        "player_name": "Home Winger",
+        "jersey_number": 3,
+        "details": [
+          {
+            "id": 10031,
+            "player_id": 1003,
+            "type_id": 118,
+            "data": {
+              "value": 7.0
+            }
+          },
+          {
+            "id": 10032,
+            "player_id": 1003,
+            "type_id": 119,
+            "data": {
+              "value": 60
+            }
+          }
+        ]
+      },
+      {
+        "id": 7028,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 1004,
+        "team_id": 100,
+        "position_id": 26,
+        "formation_field": null,
+        "type_id": 11,
+        "formation_position": null,
+        "player_name": "Home Midfielder",
+        "jersey_number": 4,
+        "details": [
+          {
+            "id": 10041,
+            "player_id": 1004,
+            "type_id": 118,
+            "data": {
+              "value": 5.6
+            }
+          },
+          {
+            "id": 10042,
+            "player_id": 1004,
+            "type_id": 119,
+            "data": {
+              "value": 90
+            }
+          }
+        ]
+      },
+      {
+        "id": 7035,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 1005,
+        "team_id": 100,
+        "position_id": 25,
+        "formation_field": null,
+        "type_id": 11,
+        "formation_position": null,
+        "player_name": "Home Defender",
+        "jersey_number": 5,
+        "details": [
+          {
+            "id": 10051,
+            "player_id": 1005,
+            "type_id": 118,
+            "data": {
+              "value": 5.4
+            }
+          },
+          {
+            "id": 10052,
+            "player_id": 1005,
+            "type_id": 119,
+            "data": {
+              "value": 88
+            }
+          }
+        ]
+      },
+      {
+        "id": 7084,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 1012,
+        "team_id": 100,
+        "position_id": 24,
+        "formation_field": null,
+        "type_id": 12,
+        "formation_position": null,
+        "player_name": "Home Reserve Keeper",
+        "jersey_number": 12,
+        "details": []
+      },
+      {
+        "id": 7091,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 1013,
+        "team_id": 100,
+        "position_id": 27,
+        "formation_field": null,
+        "type_id": 12,
+        "formation_position": null,
+        "player_name": "Home Super Sub",
+        "jersey_number": 13,
+        "details": [
+          {
+            "id": 10131,
+            "player_id": 1013,
+            "type_id": 118,
+            "data": {
+              "value": 7.24
+            }
+          },
+          {
+            "id": 10132,
+            "player_id": 1013,
+            "type_id": 119,
+            "data": {
+              "value": 30
+            }
+          }
+        ]
+      },
+      {
+        "id": 14007,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 2001,
+        "team_id": 200,
+        "position_id": 24,
+        "formation_field": null,
+        "type_id": 11,
+        "formation_position": null,
+        "player_name": "Away Keeper",
+        "jersey_number": 1,
+        "details": [
+          {
+            "id": 20011,
+            "player_id": 2001,
+            "type_id": 118,
+            "data": {
+              "value": 6.3
+            }
+          },
+          {
+            "id": 20012,
+            "player_id": 2001,
+            "type_id": 119,
+            "data": {
+              "value": 80
+            }
+          }
+        ]
+      },
+      {
+        "id": 14014,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 2002,
+        "team_id": 200,
+        "position_id": 25,
+        "formation_field": null,
+        "type_id": 11,
+        "formation_position": null,
+        "player_name": "Away Defender",
+        "jersey_number": 2,
+        "details": [
+          {
+            "id": 20021,
+            "player_id": 2002,
+            "type_id": 118,
+            "data": {
+              "value": 5.0
+            }
+          },
+          {
+            "id": 20022,
+            "player_id": 2002,
+            "type_id": 119,
+            "data": {
+              "value": 62
+            }
+          }
+        ]
+      },
+      {
+        "id": 14021,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 2003,
+        "team_id": 200,
+        "position_id": 27,
+        "formation_field": null,
+        "type_id": 11,
+        "formation_position": null,
+        "player_name": "Away Striker",
+        "jersey_number": 3,
+        "details": [
+          {
+            "id": 20031,
+            "player_id": 2003,
+            "type_id": 118,
+            "data": {
+              "value": 6.25
+            }
+          },
+          {
+            "id": 20032,
+            "player_id": 2003,
+            "type_id": 119,
+            "data": {
+              "value": 90
+            }
+          }
+        ]
+      },
+      {
+        "id": 14028,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 2004,
+        "team_id": 200,
+        "position_id": 26,
+        "formation_field": null,
+        "type_id": 11,
+        "formation_position": null,
+        "player_name": "Away Winger",
+        "jersey_number": 4,
+        "details": [
+          {
+            "id": 20041,
+            "player_id": 2004,
+            "type_id": 118,
+            "data": {
+              "value": 6.0
+            }
+          },
+          {
+            "id": 20042,
+            "player_id": 2004,
+            "type_id": 119,
+            "data": {
+              "value": 90
+            }
+          }
+        ]
+      },
+      {
+        "id": 14035,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 2005,
+        "team_id": 200,
+        "position_id": 25,
+        "formation_field": null,
+        "type_id": 11,
+        "formation_position": null,
+        "player_name": "Away Centre Back",
+        "jersey_number": 5,
+        "details": [
+          {
+            "id": 20051,
+            "player_id": 2005,
+            "type_id": 118,
+            "data": {
+              "value": 5.5
+            }
+          },
+          {
+            "id": 20052,
+            "player_id": 2005,
+            "type_id": 119,
+            "data": {
+              "value": 90
+            }
+          }
+        ]
+      },
+      {
+        "id": 14042,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 2006,
+        "team_id": 200,
+        "position_id": 24,
+        "formation_field": null,
+        "type_id": 12,
+        "formation_position": null,
+        "player_name": "Away Reserve Keeper",
+        "jersey_number": 6,
+        "details": [
+          {
+            "id": 20061,
+            "player_id": 2006,
+            "type_id": 118,
+            "data": {
+              "value": "6.0"
+            }
+          },
+          {
+            "id": 20062,
+            "player_id": 2006,
+            "type_id": 119,
+            "data": {
+              "value": 10
+            }
+          }
+        ]
+      },
+      {
+        "id": 14049,
+        "sport_id": 1,
+        "fixture_id": 5001,
+        "player_id": 2007,
+        "team_id": 200,
+        "position_id": 26,
+        "formation_field": null,
+        "type_id": 12,
+        "formation_position": null,
+        "player_name": "Away Unused",
+        "jersey_number": 7,
+        "details": []
+      }
+    ],
+    "events": [
+      {
+        "id": 9013,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 100,
+        "type_id": 14,
+        "section": "event",
+        "player_id": 1013,
+        "related_player_id": 1002,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 90,
+        "extra_minute": 3,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9001,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 100,
+        "type_id": 14,
+        "section": "event",
+        "player_id": 1002,
+        "related_player_id": 1003,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 12,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9002,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 200,
+        "type_id": 19,
+        "section": "event",
+        "player_id": 2002,
+        "related_player_id": null,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 20,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9003,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 200,
+        "type_id": 16,
+        "section": "event",
+        "player_id": 2003,
+        "related_player_id": null,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 30,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9004,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 100,
+        "type_id": 17,
+        "section": "event",
+        "player_id": 1004,
+        "related_player_id": null,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 38,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": 1508,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9005,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 100,
+        "type_id": 19,
+        "section": "event",
+        "player_id": null,
+        "related_player_id": null,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 45,
+        "extra_minute": 2,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": 9,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9006,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 200,
+        "type_id": 14,
+        "section": "event",
+        "player_id": 2004,
+        "related_player_id": null,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 55,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": true,
+        "sort_order": null
+      },
+      {
+        "id": 9007,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 100,
+        "type_id": 18,
+        "section": "event",
+        "player_id": 1013,
+        "related_player_id": 1003,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 60,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9008,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 200,
+        "type_id": 21,
+        "section": "event",
+        "player_id": 2002,
+        "related_player_id": null,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 62,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9009,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 200,
+        "type_id": 17,
+        "section": "event",
+        "player_id": 2003,
+        "related_player_id": null,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 70,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": 1509,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9010,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 100,
+        "type_id": 15,
+        "section": "event",
+        "player_id": 2005,
+        "related_player_id": null,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 75,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9011,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 200,
+        "type_id": 18,
+        "section": "event",
+        "player_id": 2006,
+        "related_player_id": 2001,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 80,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9012,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 100,
+        "type_id": 20,
+        "section": "event",
+        "player_id": 1005,
+        "related_player_id": null,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 88,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      },
+      {
+        "id": 9014,
+        "fixture_id": 5001,
+        "period_id": 1,
+        "participant_id": 200,
+        "type_id": 10,
+        "section": "event",
+        "player_id": 2004,
+        "related_player_id": null,
+        "player_name": null,
+        "related_player_name": null,
+        "result": null,
+        "info": null,
+        "addition": null,
+        "minute": 55,
+        "extra_minute": null,
+        "injured": null,
+        "on_bench": false,
+        "coach_id": null,
+        "sub_type_id": null,
+        "detailed_period_id": null,
+        "rescinded": false,
+        "sort_order": null
+      }
+    ]
+  },
+  "subscription": [],
+  "rate_limit": {
+    "resets_in_seconds": 3500,
+    "remaining": 2999,
+    "requested_entity": "Fixture"
+  },
+  "timezone": "UTC"
+}
