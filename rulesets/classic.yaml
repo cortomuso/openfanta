@@ -1,0 +1,39 @@
+# Classic fantacalcio rules.
+# All point values are integer hundredths: 300 means +3, -50 means -0.5.
+# A published (id, version) is immutable: to change a value, bump the version.
+# Every key is documented in docs/rulesets.md.
+id: classic
+version: 1.0.0
+name: Classic
+description: Standard Classic bonus and malus values.
+
+scores:
+  goal: 300
+  penalty_scored: 300
+  penalty_missed: -300
+  penalty_saved: 300
+  own_goal: -200
+  assist: 100
+  yellow_card: -50
+  red_card: -100
+  gk_goal_conceded: -100
+  gk_clean_sheet: 100
+
+options:
+  red_replaces_yellow: true
+  gk_clean_sheet_min_minutes: 0
+
+senza_voto:
+  # Players with fewer minutes than this are senza voto even if a voto exists.
+  min_minutes: 15
+  # A senza voto player who has one of these events gets this voto d'ufficio.
+  # Checked in order; the first matching event wins.
+  voto_ufficio:
+    - when: red_card
+      voto: 400
+    - when: goal
+      voto: 600
+    - when: penalty_scored
+      voto: 600
+    - when: penalty_saved
+      voto: 600

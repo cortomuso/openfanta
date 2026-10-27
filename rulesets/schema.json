@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openfanta.org/schemas/ruleset/v1.json",
+  "title": "OpenFanta rule set",
+  "description": "Bonus and malus values for computing fantavoti. All point values are integer hundredths (300 = +3.00).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "name", "scores", "options", "senza_voto"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal", "penalty_scored", "penalty_missed", "penalty_saved", "own_goal",
+        "assist", "yellow_card", "red_card", "gk_goal_conceded", "gk_clean_sheet"
+      ],
+      "properties": {
+        "goal": { "$ref": "#/$defs/points" },
+        "penalty_scored": { "$ref": "#/$defs/points" },
+        "penalty_missed": { "$ref": "#/$defs/points" },
+        "penalty_saved": { "$ref": "#/$defs/points" },
+        "own_goal": { "$ref": "#/$defs/points" },
+        "assist": { "$ref": "#/$defs/points" },
+        "yellow_card": { "$ref": "#/$defs/points" },
+        "red_card": { "$ref": "#/$defs/points" },
+        "gk_goal_conceded": { "$ref": "#/$defs/points" },
+        "gk_clean_sheet": { "$ref": "#/$defs/points" }
+      }
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["red_replaces_yellow", "gk_clean_sheet_min_minutes"],
+      "properties": {
+        "red_replaces_yellow": { "type": "boolean" },
+        "gk_clean_sheet_min_minutes": { "type": "integer", "minimum": 0, "maximum": 120 }
+      }
+    },
+    "senza_voto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_minutes", "voto_ufficio"],
+      "properties": {
+        "min_minutes": { "type": "integer", "minimum": 0, "maximum": 120 },
+        "voto_ufficio": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["when", "voto"],
+            "properties": {
+              "when": { "$ref": "#/$defs/event" },
+              "voto": { "type": "integer", "minimum": 0, "maximum": 1000 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "points": { "type": "integer", "minimum": -10000, "maximum": 10000 },
+    "event": {
+      "enum": [
+        "goal", "penalty_scored", "penalty_missed", "penalty_saved", "own_goal",
+        "assist", "yellow_card", "red_card"
+      ]
+    }
+  }
+}
