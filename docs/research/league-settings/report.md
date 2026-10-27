@@ -1,4 +1,7 @@
-# Compose fantacalcio rules from typed, versioned modules
+---
+title: "League settings: research report"
+description: "Synthesis of the research behind the league settings format."
+---
 
 > **Status (2026-10-27):** research input, not the decided design. The project owner later decided
 > that **settings changes are never retroactive**: they apply only from an open matchday, and closed

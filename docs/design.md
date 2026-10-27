@@ -1,4 +1,7 @@
-# OpenFanta design note
+---
+title: "Design note"
+description: "Architecture, decisions, data model, scoring semantics and the leagues design."
+---
 
 ## 1. Architecture
 
@@ -120,7 +123,7 @@ graceful shutdown: `serve` in `cmd/openfanta/main.go`. Upstream retries, backoff
 
 ## 9. League settings format (design, not built yet)
 
-Research behind this section: [docs/research/league-settings/](research/league-settings/report.md).
+Research behind this section: [league settings research](research/league-settings/report.md).
 
 **Finding:** fantacalcio rules vary widely but shallowly. Almost every rule is one of a few shapes with parameters: per-event values with per-role overrides, band tables (modificatore difesa, captain), goal-threshold lists (fasce gol), zero-sum duels (modificatore centrocampo), score corrections, ordered tie-breakers. Substitution logic (Classic modes, Mantra Basic/Easy/Master) is algorithmic: it lives in engine code and leagues select it by name.
 

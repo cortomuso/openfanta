@@ -1,4 +1,7 @@
-# Player-level scoring rules in Italian fantacalcio (platforms and house rules)
+---
+title: "Notes: player rules"
+description: "Research notes on player-level scoring rules."
+---
 
 ## Classic vs Mantra: player-level differences
 

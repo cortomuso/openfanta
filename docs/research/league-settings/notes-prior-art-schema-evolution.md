@@ -1,4 +1,7 @@
-# Prior Art and Schema Evolution for Fantacalcio League Settings
+---
+title: "Notes: prior art and schema evolution"
+description: "Research notes on how other platforms model and evolve settings."
+---
 
 ## Q1. Prior art: how fantasy platforms model scoring/roster/league settings and mid-season changes
 

@@ -1,10 +1,13 @@
-# Rule sets
+---
+title: "Rule sets"
+description: "Reference for every key in a rule set file."
+---
 
 A rule set is a YAML (or JSON) file that holds every bonus and malus value used to
 compute fantavoti. Changing values needs no code change.
 
-- Built-in rule sets live in [`rulesets/`](../rulesets) and are embedded in the binary.
-- Files are validated against [`rulesets/schema.json`](../rulesets/schema.json) (JSON Schema 2020-12)
+- Built-in rule sets live in [`rulesets/`](https://github.com/cortomuso/openfanta/tree/main/rulesets) and are embedded in the binary.
+- Files are validated against [`rulesets/schema.json`](https://github.com/cortomuso/openfanta/blob/main/rulesets/schema.json) (JSON Schema 2020-12)
   when they load. Unknown keys are rejected.
 - **All point values are integer hundredths**: `300` means +3, `-50` means -0.5. No floats.
 - A rule set is identified by `id@version`, e.g. `classic@1.0.0`. A published version is

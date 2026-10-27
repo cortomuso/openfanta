@@ -4,7 +4,7 @@ PKGS      := ./...
 CORE_PKGS := ./internal/domain/... ./internal/rules/... ./internal/timeline/... ./internal/engine/...
 CORE_MIN_COVERAGE := 95
 
-.PHONY: all build test test-all test-core cover lint fmt-check gen run db-up db-down pg-start pg-stop
+.PHONY: docs-dev docs-build all build test test-all test-core cover lint fmt-check gen run db-up db-down pg-start pg-stop
 
 all: lint test build
 
@@ -52,3 +52,10 @@ pg-start:
 
 pg-stop:
 	scripts/dev-postgres.sh stop
+
+# Documentation site (Astro Starlight). Content is docs/ and api/openapi.yaml.
+docs-dev:
+	cd website && npm ci && npm run dev
+
+docs-build:
+	cd website && npm ci && npm run build

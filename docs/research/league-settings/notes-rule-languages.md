@@ -1,4 +1,7 @@
-# Rule/Expression Languages for Deterministic, User-Configurable Fantacalcio Scoring (Go backend)
+---
+title: "Notes: rule languages"
+description: "Research notes on expression languages for scoring rules."
+---
 
 Research date: 2026-10-27.
 

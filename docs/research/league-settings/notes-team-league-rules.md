@@ -1,4 +1,7 @@
-# Fantacalcio team-, matchday- and league-level rules (Serie A, 2025/26 to 2026/27)
+---
+title: "Notes: team and league rules"
+description: "Research notes on team-, matchday- and league-level rules."
+---
 
 > Dependency legend: [LINEUP] = depends only on your own line-up; [OPP] = depends on the opponent; [LEAGUE] = depends on the whole league or matchday ranking; [CAL] = depends on the fixture calendar.
 

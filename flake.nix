@@ -23,6 +23,7 @@
             postgresql_16
             gnumake
             jq
+            nodejs_22
           ];
           shellHook = ''
             export GOTOOLCHAIN=local
