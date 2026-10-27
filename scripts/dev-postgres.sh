@@ -13,7 +13,7 @@ case "${1:-}" in
       initdb --auth=trust --username=openfanta --encoding=UTF8 "$DATA" >/dev/null
     fi
     if ! pg_ctl -D "$DATA" status >/dev/null 2>&1; then
-      pg_ctl -D "$DATA" -o "-p $PORT -k $DATA -c listen_addresses=localhost" -l "$DATA/log" -w start >/dev/null
+      pg_ctl -D "$DATA" -o "-p $PORT -c listen_addresses=localhost -c unix_socket_directories=''" -l "$DATA/log" -w start >/dev/null
     fi
     createdb -h localhost -p "$PORT" -U openfanta openfanta 2>/dev/null || true
     echo "$URL"
