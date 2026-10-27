@@ -15,7 +15,7 @@ import (
 
 // parserVersion must change whenever parsing can produce different output
 // from the same payload.
-const parserVersion = "1"
+const parserVersion = "2"
 
 // ErrParse wraps every parsing failure.
 var ErrParse = errors.New("sportmonks: cannot parse payload")
@@ -290,6 +290,9 @@ func convertEvent(e smEvent, teamOf map[string]domain.TeamID) (domain.Event, boo
 
 	team, ok := teamOf[player]
 	if !ok {
+		if kind == domain.EventYellowCard || kind == domain.EventRedCard || kind == domain.EventSecondYellow {
+			return domain.Event{}, false, nil // a card shown to a coach: player_id is the coach's person ID
+		}
 		return domain.Event{}, false, fmt.Errorf("player %s not in lineups", player)
 	}
 	if related != "" {
