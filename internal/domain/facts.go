@@ -51,6 +51,9 @@ type Appearance struct {
 	Team    TeamID   `json:"team"`
 	Role    Role     `json:"role"`
 	Starter bool     `json:"starter"`
+	// Rating is the provider's own player rating, if any. The engine ignores it;
+	// a voto source may use it.
+	Rating *Points `json:"rating,omitempty"`
 }
 
 // MatchFacts is the provider-agnostic description of a finished match: the

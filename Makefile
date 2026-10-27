@@ -4,15 +4,20 @@ PKGS      := ./...
 CORE_PKGS := ./internal/domain/... ./internal/rules/... ./internal/timeline/... ./internal/engine/...
 CORE_MIN_COVERAGE := 95
 
-.PHONY: all build test test-core cover lint gen run db-up db-down
+.PHONY: all build test test-all test-core cover lint gen run db-up db-down pg-start pg-stop
 
 all: lint test build
 
 build:
 	$(GO) build -o bin/openfanta ./cmd/openfanta
 
+# Database tests are skipped unless OPENFANTA_TEST_DATABASE_URL is set.
 test:
 	$(GO) test -race -count=1 $(PKGS)
+
+# Runs every test, database included, against a throwaway local Postgres.
+test-all: pg-start
+	OPENFANTA_TEST_DATABASE_URL=$$(scripts/dev-postgres.sh url) $(GO) test -race -count=1 $(PKGS)
 
 # Fails if the pure core drops below the coverage gate.
 test-core:
@@ -37,3 +42,10 @@ db-up:
 
 db-down:
 	docker compose down
+
+# Postgres from the Nix devshell, no Docker needed. Data lives in .pgdata/.
+pg-start:
+	@scripts/dev-postgres.sh start
+
+pg-stop:
+	scripts/dev-postgres.sh stop
