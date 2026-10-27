@@ -18,6 +18,9 @@ is the player coming on), a goalkeeper change, a yellow card, a second yellow, a
 a card shown to a coach, a goal rescinded by VAR, events listed out of order, and a rating
 given as a string.
 
-Replace or supplement them with recorded real responses once a token is available. Raw
-responses are stored verbatim in the `raw_payloads` table, so they can be exported from there.
+Do not commit real Sportmonks responses: the data belongs to Sportmonks, not to this AGPL
+project. When real data shows a shape these files miss (for example, real payloads put a coach's
+person ID in `player_id` on a card event), reproduce the shape here with invented IDs and names.
+To check the parser against real data locally, ingest a matchday and re-run it offline with
+`openfanta recompute --reparse`; raw responses stay in your own `raw_payloads` table.
 Never commit an API token.
