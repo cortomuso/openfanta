@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -185,6 +186,28 @@ func TestParseErrors(t *testing.T) {
 	}
 	if _, err := ParseSchedule(provider.Raw{Body: []byte(`{"data":{}}`)}); !errors.Is(err, ErrParse) {
 		t.Errorf("schedule wrong shape: %v", err)
+	}
+}
+
+// Real Sportmonks data puts a coach's person ID in player_id (coach_id stays
+// null), so a card for someone outside the line-ups is staff and is dropped.
+// Any other event for an unknown player is still an error.
+func TestParseIgnoresStaffCards(t *testing.T) {
+	const head = `{"data":{"id":1,"participants":[{"id":1,"meta":{"location":"home"}},{"id":2,"meta":{"location":"away"}}],
+		"lineups":[{"player_id":5,"team_id":1,"type_id":11}],"events":[`
+	for _, typeID := range []int{eventYellow, eventRed, eventYellowRed} {
+		body := head + fmt.Sprintf(`{"id":1,"type_id":%d,"player_id":99,"coach_id":null}]}}`, typeID)
+		f, err := ParseFixture(provider.Raw{Key: "staff card", Body: []byte(body)})
+		if err != nil {
+			t.Fatalf("type %d: %v", typeID, err)
+		}
+		if len(f.Facts.Events) != 0 {
+			t.Errorf("type %d: events = %v, want none", typeID, f.Facts.Events)
+		}
+	}
+	body := head + `{"id":1,"type_id":17,"player_id":99}]}}`
+	if _, err := ParseFixture(provider.Raw{Key: "unknown penalty taker", Body: []byte(body)}); !errors.Is(err, ErrParse) {
+		t.Errorf("missed penalty by unknown player: err = %v, want ErrParse", err)
 	}
 }
 
