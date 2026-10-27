@@ -14,7 +14,8 @@ info:
     - Errors use RFC 9457 `application/problem+json`.
     - Responses carry an `ETag`; send `If-None-Match` to get `304 Not Modified`.
   license:
-    name: To be decided
+    name: AGPL-3.0
+    url: https://www.gnu.org/licenses/agpl-3.0.html
 servers:
   - url: http://localhost:8080
 tags:

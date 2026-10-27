@@ -51,100 +51,57 @@ Mitigation: the API serves only **derived** values (voto, fantavoto, breakdown) 
 ### 2.3 Database: **Postgres 16+** (chosen)
 JSONB for raw payloads and breakdowns, a single SQL dialect, and concurrent ingest and serve. Migrations use goose, embedded in the binary. Queries are generated with sqlc on pgx/v5. Dev and tests use Postgres from the Nix devshell or docker compose.
 
-### 2.4 Rule sets as data (interim)
-> The rule set format below is the **interim** Classic scorer. It will be replaced by the
-> per-league settings format in §9; the engine is generalized, not removed.
+> **Implemented parts: the code is the source of truth.** The sections below give the reasoning
+> and point to the code; they deliberately don't restate behaviour that lives there.
 
-- File: `rulesets/classic.yaml`, validated against `rulesets/schema.json`. Each file has an id (`classic`) and a semver `version`.
-- **All values are integer hundredths** (`goal: 300` = +3.00), to keep results deterministic with no floats anywhere.
-- Classic v1.0.0 keys: `goal`, `penalty_scored`, `penalty_missed`, `penalty_saved`, `own_goal`, `assist`, `yellow_card`, `red_card`, `red_replaces_yellow`, `gk_goal_conceded`, `gk_clean_sheet`, `gk_clean_sheet_min_minutes`, plus a `senza_voto` policy: `min_minutes`, and the voto d'ufficio given when an s.v. player has an event (e.g. goal → 600, red card → 400).
-- On startup each rule set is loaded and stored in `rule_sets` with a content hash. A published `(id, version)` is **immutable**: changing a value means bumping the version. Adding a league rule set means adding a YAML file, with no code change, as long as it only uses existing keys. New *kinds* of bonus need an engine change plus a schema bump.
-- `docs/rulesets.md` documents every key.
+### 2.4 Rule sets (interim scorer)
+Bonus/malus values are data, not code, in integer hundredths so results are deterministic. A
+published `id@version` is immutable. This format is the **interim** Classic scorer and will be
+replaced by the per-league settings in §9 (the engine is generalized, not removed).
+Code: `rulesets/schema.json`, `rulesets/classic.yaml`, `internal/rules/`, `internal/engine/`.
 
 ### 2.5 Versioning and audit
-- `raw_payloads` is append-only, keyed by `(provider, request_key, sha256)`. A corrected upstream response becomes a new row.
-- `fixture_facts`: the normalized MatchFacts, plus `facts_hash`, `normalizer_version` and the raw payload ids it came from.
-- `computation_runs`: `(fixture, fixture_facts_id, rule_set_id, voto_source, engine_version, input_hash, supersedes_run_id, reason, created_at)`, immutable.
-- `player_scores` belong to a run. `current_runs(fixture, rule_set, voto_source) → run_id` is moved in the same transaction that inserts the run.
-- Recompute is idempotent: if `input_hash` hasn't changed, no new run is created. The history is visible at `GET /v1/fixtures/{id}/runs`.
+Raw payloads are append-only, normalized facts and computation runs are immutable, and a run is
+only created when its input hash changes; the current run pointer moves in the same transaction.
+Code: `internal/store/migrations/`, `store.RecordRun` in `internal/store/store.go`,
+`inputHash` in `internal/ingest/ingest.go`.
 
-### 2.6 VotoSource
-`type VotoSource interface { Votes(ctx, facts MatchFacts) (map[PlayerID]Voto, error) }`. The engine never calls it. The shell resolves votes and passes them in as data. v1 implements `provider-rating`: Sportmonks rating 118 **unrounded, at two-decimal precision** (`6.38`, stored as 638 hundredths). The parser rounds any extra provider digits half away from zero; nothing downstream rounds voti. Rounding to halves or whole points is a league setting (see §9). Players without a rating have no voto; whether they are s.v. is decided by the rule set (`senza_voto`). A CSV import source can be added later without touching the engine.
+### 2.6 Voto source
+The engine never fetches voti; the shell resolves them and passes them in as data, so sources can
+be swapped (a CSV/manual source later) without touching the engine. Voto is the provider rating
+unrounded at two decimals; rounding is a league setting (§9).
+Code: `internal/voto/voto.go`, `parseRating` in `internal/provider/sportmonks/parse.go`.
 
 ### 2.7 API style: REST + OpenAPI, spec-first
-`api/openapi.yaml` is the source of truth. It is written as OpenAPI **3.0.3**, not 3.1, because
-the Go generator (oapi-codegen) and validator (kin-openapi) only fully support 3.0. Moving to 3.1
-is mechanical once tooling catches up. Go server stubs are generated from it with oapi-codegen (strict server, stdlib router). Conventions are chosen so the API can open up later:
-- versioned `/v1`
-- opaque string IDs (UUIDv7, never provider ids; provider refs live in a mapping table)
-- **decimals as strings with exactly two digits** (`"6.38"`, `"7.00"`) so third-party implementations don't hit float drift
-- RFC 9457 `application/problem+json` errors
-- cursor pagination, once a list can grow unbounded (today every list is bounded: one matchday,
-  one season of one player)
-- `ETag` / `Cache-Control`
+`api/openapi.yaml` is the contract and the server is generated from it. It is OpenAPI **3.0.3**,
+not 3.1, because oapi-codegen and kin-openapi only fully support 3.0. Conventions chosen so the
+API can be opened up later: versioned `/v1`, opaque UUIDv7 IDs (provider IDs never leak), decimals
+as two-digit strings (no float drift for other implementations), RFC 9457 problem+json, ETags.
+Cursor pagination will come once a list can grow unbounded.
 
-Endpoints:
-```
-GET /healthz, /readyz
-GET /v1/rulesets                      GET /v1/rulesets/{id}/versions/{version}
-GET /v1/seasons                       GET /v1/seasons/{seasonId}/matchdays
-GET /v1/seasons/{seasonId}/matchdays/{n}/scores?ruleset=classic
-GET /v1/seasons/{seasonId}/players/{playerId}/scores?ruleset=classic&voto_source=provider-rating
-GET /v1/fixtures/{fixtureId}/scores   GET /v1/fixtures/{fixtureId}/runs
-GET /v1/players/{playerId}
-```
-Score object: `{player, team, fixture, matchday, role, minutes, voto|null, fantavoto|null, sv, breakdown:[{code,count,points}], run:{id, ruleset, version, voto_source, computed_at}}`.
+## 3. Data model
+Code: `internal/store/migrations/` (schema) and `internal/store/queries/` (access paths).
+All scores are `integer` hundredths.
 
-## 3. Data model (Postgres)
-`competitions, seasons, matchdays, teams, players, fixtures` (UUIDv7 PKs) · `provider_refs(entity, entity_id, provider, external_id)` UNIQUE · `raw_payloads` · `fixture_facts` · `rule_sets(id, version, content_hash, body jsonb)` · `computation_runs` · `player_scores(run_id, player_id, team_id, role, minutes, voto, fantavoto, sv, breakdown jsonb)` · `current_runs`. Voti and fantavoti are stored as `integer` hundredths.
-
-## 4. Engine semantics (Classic)
-- Input per player: role (GK or outfield, from the lineup position), minutes, goals (open play), penalties scored/missed/saved, own goals, assists, yellow, red (a second yellow counts as red), goals conceded while on the pitch, and clean sheet.
-- Goals conceded and clean sheet are derived in the pure `timeline` package from events and substitution and red-card exit minutes. They are cross-checked against Sportmonks stat 88 in tests.
-- `fantavoto = voto + Σ(count × value)`, or s.v. per the policy.
-- Engine output includes a full breakdown per player, so every number can be audited.
+## 4. Scoring semantics
+Code: `internal/timeline/` (per-player facts: minutes, goals conceded on the pitch, cards) and
+`internal/engine/` (interim Classic fantavoto with breakdown). Their tests are the executable spec.
 
 ## 5. Package layout
-```
-cmd/openfanta/            main, subcommands
-internal/domain/          IDs, Points (int hundredths), MatchFacts
-internal/rules/           RuleSet types, YAML load, validate, hash
-internal/timeline/        pure: on-pitch intervals, goals conceded, clean sheet
-internal/engine/          pure: Compute(facts, ruleset, votes) → []PlayerScore
-internal/voto/            VotoSource + providerrating
-internal/provider/        Provider interface, resilient HTTP client (retry/backoff, rate limit, cache)
-internal/provider/sportmonks/  client, normalizer, testdata/*.json (recorded)
-internal/store/           pgx + sqlc, migrations/
-internal/ingest/          orchestration (fetch → store raw → normalize → compute → persist)
-internal/api/             generated + handlers
-internal/config/          env parsing
-api/openapi.yaml  rulesets/  docs/  flake.nix  Dockerfile  compose.yaml  Makefile
-```
-Provider contract:
-```go
-type Provider interface {
-    Name() string
-    ListFixtures(ctx context.Context, season SeasonRef, matchday int) ([]RawPayload, error)
-    FetchFixture(ctx context.Context, ref FixtureRef) (RawPayload, error)
-}
-type Normalizer interface { Normalize(p RawPayload) (domain.MatchFacts, error) } // pure
-```
+See the "Project layout" section of the README and the package doc comments.
+Provider contract: `internal/provider/provider.go`.
 
 ## 6. Operational
-- Configuration via env (`OPENFANTA_DATABASE_URL`, `OPENFANTA_SPORTMONKS_TOKEN`, `OPENFANTA_HTTP_ADDR`, `OPENFANTA_LOG_LEVEL`). A `.env.example` is committed; `.env` is gitignored.
-- `log/slog` JSON logging.
-- Graceful shutdown on SIGINT/SIGTERM.
-- Server timeouts: read-header 5s, write 15s, idle 60s. Upstream timeout 20s.
-- Retry: exponential backoff with jitter on 5xx and network errors. Honour 429 `retry_after`.
-- A token bucket keeps usage under the per-entity budget and reads `rate_limit.remaining`.
-- Fixtures with status FT are cached forever in `raw_payloads` and only re-fetched with `--refresh`.
+Configuration: `internal/config/config.go` (env only, see `.env.example`). Server timeouts and
+graceful shutdown: `serve` in `cmd/openfanta/main.go`. Upstream retries, backoff and rate limiting:
+`internal/provider/httpx/client.go`. Caching policy: `internal/ingest/ingest.go`.
 
 ## 7. Open questions
 1. **Sportmonks plan:** Serie A isn't on the free plan. Will you take the Starter plan or the 14-day trial? A token is needed to record fixtures and for the DoD real-matchday run.
 2. **Player rating availability:** confirm that rating (118) is included in the chosen plan. If not, voto falls back to s.v. for everyone, and we need a different VotoSource.
 3. **Redistribution:** read the Sportmonks ToS (or ask them) before any public deployment of provider-rating-based voti.
 4. **Classic defaults (interim scorer only):** confirm the s.v. policy (voto d'ufficio 6 for a goal, 4 for a red card), the clean-sheet minimum minutes (proposed: any minutes, with 0 conceded while on pitch), and the penalty-scored value (proposed 300, same as goal).
-5. **Licence:** proposed Apache-2.0 for code (patent grant, friendly to third-party protocol implementers).
+5. ~~**Licence**~~: decided, **AGPL-3.0** (see `LICENSE`).
 6. **Target season** for the real-matchday demo (proposed: current Serie A 2026/27).
 
 
@@ -204,6 +161,7 @@ A full example document (a Classic league, and how Mantra fits the same structur
 
 ## 10. Decision log
 
+- **2026-10-27: licence AGPL-3.0** (chosen by the owner).
 - **2026-10-27: base voto at two-decimal precision.** `voto` is the provider rating unrounded (`6.38`). Rounding moved from the voto source into league settings.
 - **2026-10-27: the server is the source of truth for leagues** and computes fantavoti from per-league settings (a brief proposal to compute fantavoti on clients was dropped, because members using different clients must get identical results).
 - **2026-10-27: no retroactive rule changes**; closed matchdays change only through logged owner/admin corrections; all inputs freeze at matchday close.

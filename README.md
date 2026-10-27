@@ -179,3 +179,7 @@ matchday lifecycle, auth) is in [docs/design.md](docs/design.md) §8–10, backe
 See section 7 of [docs/design.md](docs/design.md). In short: the Sportmonks test fixtures are
 synthetic (see their README) until a real token is available, and voti currently come from the
 provider's player rating.
+
+## License
+
+[AGPL-3.0](LICENSE).
