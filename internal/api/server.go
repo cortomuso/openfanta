@@ -294,7 +294,7 @@ func score(r db.CurrentScore) (Score, error) {
 	}
 	breakdown := make([]BreakdownItem, 0, len(items))
 	for _, it := range items {
-		breakdown = append(breakdown, BreakdownItem{Code: string(it.Code), Count: it.Count, Points: it.Points.String()})
+		breakdown = append(breakdown, BreakdownItem{Code: string(it.Code), Count: it.Count, Points: it.Points.Fixed2()})
 	}
 	return Score{
 		Player: Ref{Id: r.PlayerID.String(), Name: r.PlayerName}, Team: Ref{Id: r.TeamID.String(), Name: r.TeamName},
@@ -309,6 +309,6 @@ func decimal(v *int32) *Decimal {
 	if v == nil {
 		return nil
 	}
-	s := domain.Points(*v).String()
+	s := domain.Points(*v).Fixed2()
 	return &s
 }

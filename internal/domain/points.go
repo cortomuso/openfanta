@@ -37,6 +37,18 @@ func (p Points) String() string {
 	}
 }
 
+// Fixed2 formats p with exactly two decimals: 638 -> "6.38", 630 -> "6.30",
+// 700 -> "7.00", -50 -> "-0.50". This is the public API format.
+func (p Points) Fixed2() string {
+	sign := ""
+	v := int64(p)
+	if v < 0 {
+		sign = "-"
+		v = -v
+	}
+	return fmt.Sprintf("%s%d.%02d", sign, v/Scale, v%Scale)
+}
+
 // ErrInvalidPoints is returned by ParsePoints for malformed input.
 var ErrInvalidPoints = errors.New("invalid points")
 

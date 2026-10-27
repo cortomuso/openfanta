@@ -100,21 +100,21 @@ func TestIngestMatchdayEndToEnd(t *testing.T) {
 		t.Fatalf("fixture 5001 = %+v", ok)
 	}
 
-	// Classic with provider-rating voti, computed by hand from the fixture:
+	// Classic with unrounded provider-rating voti, computed by hand from the fixture:
 	got := scores(t, st, ok.ID)
 	want := map[string]scoreView{
-		"Home Keeper":         {"7", "9", false},     // 6.9→7, penalty saved +3, conceded 1 −1
-		"Home Striker":        {"8", "12", false},    // 8.1→8, goal +3, assist +1
-		"Home Winger":         {"7", "8", false},     // assist +1
-		"Home Midfielder":     {"5.5", "2.5", false}, // penalty missed −3
-		"Home Defender":       {"5.5", "4.5", false}, // red −1
-		"Home Super Sub":      {"7", "10", false},    // 7.24→7, goal +3
-		"Away Keeper":         {"6.5", "4.5", false}, // 6.3→6.5, conceded 2
-		"Away Defender":       {"5", "4", false},     // second yellow: red only
-		"Away Striker":        {"6.5", "6.5", false}, // 6.25→6.5, penalty +3, penalty saved −3
-		"Away Winger":         {"6", "6", false},
-		"Away Centre Back":    {"5.5", "3.5", false}, // own goal −2
-		"Away Reserve Keeper": {"-", "-", true},      // 10 minutes < 15: s.v.
+		"Home Keeper":         {"6.90", "8.90", false},  // penalty saved +3, conceded 1 −1
+		"Home Striker":        {"8.10", "12.10", false}, // goal +3, assist +1
+		"Home Winger":         {"7.00", "8.00", false},  // assist +1
+		"Home Midfielder":     {"5.60", "2.60", false},  // penalty missed −3
+		"Home Defender":       {"5.40", "4.40", false},  // red −1
+		"Home Super Sub":      {"7.24", "10.24", false}, // goal +3
+		"Away Keeper":         {"6.30", "4.30", false},  // conceded 2
+		"Away Defender":       {"5.00", "4.00", false},  // second yellow: red only
+		"Away Striker":        {"6.25", "6.25", false},  // penalty +3, penalty saved −3
+		"Away Winger":         {"6.00", "6.00", false},
+		"Away Centre Back":    {"5.50", "3.50", false}, // own goal −2
+		"Away Reserve Keeper": {"-", "-", true},        // 10 minutes < 15: s.v.
 	}
 	if len(got) != len(want) {
 		t.Errorf("got %d scored players, want %d: %v", len(got), len(want), got)
@@ -186,8 +186,8 @@ func TestCorrectedUpstreamEventCreatesAuditableRun(t *testing.T) {
 			t.Fatalf("corrected fixture = %+v", f)
 		}
 	}
-	if got := scores(t, st, id)["Home Winger"]; got.fanta != "7" {
-		t.Errorf("Home Winger after correction = %+v, want fantavoto 7", got)
+	if got := scores(t, st, id)["Home Winger"]; got.fanta != "7.00" {
+		t.Errorf("Home Winger after correction = %+v, want fantavoto 7.00", got)
 	}
 	runs, err := st.Queries().FixtureRuns(ctx, id)
 	if err != nil || len(runs) != 2 {
@@ -252,7 +252,7 @@ func TestRecomputeWithNewRuleSetVersion(t *testing.T) {
 	if err != nil || rep.Fixtures[0].RunsCreated != 1 {
 		t.Fatalf("recompute = %+v, %v", rep, err)
 	}
-	if got := scores(t, st, rep.Fixtures[0].ID)["Home Striker"]; got.fanta != "12.5" {
+	if got := scores(t, st, rep.Fixtures[0].ID)["Home Striker"]; got.fanta != "12.60" {
 		t.Errorf("Home Striker under classic 1.1.0 = %+v", got)
 	}
 	runs, _ := st.Queries().FixtureRuns(ctx, rep.Fixtures[0].ID)

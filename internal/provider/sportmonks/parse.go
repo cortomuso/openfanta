@@ -329,7 +329,9 @@ func deref(p *int) int {
 	return *p
 }
 
-// parseRating converts a rating such as 7.23 to hundredths, rounding half away from zero.
+// parseRating converts a rating such as 7.23 to hundredths, rounding half away
+// from zero (6.835 -> 6.84). This is the only place where provider precision
+// beyond two decimals is dropped; nothing downstream rounds voti.
 func parseRating(raw json.RawMessage) (domain.Points, bool) {
 	var n json.Number
 	if json.Unmarshal(raw, &n) != nil {

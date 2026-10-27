@@ -46,3 +46,15 @@ func TestPointsRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestPointsFixed2(t *testing.T) {
+	cases := map[Points]string{0: "0.00", 638: "6.38", 630: "6.30", 700: "7.00", 5: "0.05", -50: "-0.50", -1210: "-12.10"}
+	for p, want := range cases {
+		if got := p.Fixed2(); got != want {
+			t.Errorf("Points(%d).Fixed2() = %q, want %q", int64(p), got, want)
+		}
+		if back, err := ParsePoints(p.Fixed2()); err != nil || back != p {
+			t.Errorf("ParsePoints(%q) = %d, %v", p.Fixed2(), back, err)
+		}
+	}
+}

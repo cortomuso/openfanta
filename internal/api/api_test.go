@@ -135,10 +135,10 @@ func TestBrowseAndScores(t *testing.T) {
 		by[s.Player.Name] = s
 	}
 	striker := by["Home Striker"]
-	if striker.Voto == nil || *striker.Voto != "8" || striker.Fantavoto == nil || *striker.Fantavoto != "12" {
+	if striker.Voto == nil || *striker.Voto != "8.10" || striker.Fantavoto == nil || *striker.Fantavoto != "12.10" {
 		t.Errorf("Home Striker = %+v", striker)
 	}
-	if len(striker.Breakdown) != 2 || striker.Breakdown[0] != (api.BreakdownItem{Code: "goal", Count: 1, Points: "3"}) {
+	if len(striker.Breakdown) != 2 || striker.Breakdown[0] != (api.BreakdownItem{Code: "goal", Count: 1, Points: "3.00"}) {
 		t.Errorf("Home Striker breakdown = %+v", striker.Breakdown)
 	}
 	if striker.Run.RulesetVersion != "1.0.0" || striker.Matchday != 1 || striker.FixtureId != fixtureID {
@@ -147,7 +147,7 @@ func TestBrowseAndScores(t *testing.T) {
 	if sv := by["Away Reserve Keeper"]; !sv.SenzaVoto || sv.Voto != nil || sv.Fantavoto != nil || len(sv.Breakdown) != 0 {
 		t.Errorf("s.v. keeper = %+v", sv)
 	}
-	if mid := by["Home Midfielder"]; *mid.Fantavoto != "2.5" {
+	if mid := by["Home Midfielder"]; *mid.Fantavoto != "2.60" {
 		t.Errorf("Home Midfielder fantavoto = %s", *mid.Fantavoto)
 	}
 
@@ -165,7 +165,7 @@ func TestBrowseAndScores(t *testing.T) {
 	}
 	var ps api.ScoreList
 	f.get("/v1/seasons/"+seasonID+"/players/"+playerID+"/scores", 200, &ps)
-	if len(ps.Scores) != 1 || *ps.Scores[0].Fantavoto != "12" {
+	if len(ps.Scores) != 1 || *ps.Scores[0].Fantavoto != "12.10" {
 		t.Errorf("player season scores = %+v", ps)
 	}
 

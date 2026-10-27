@@ -66,7 +66,7 @@ JSONB for raw payloads and breakdowns, a single SQL dialect, and concurrent inge
 - Recompute is idempotent: if `input_hash` hasn't changed, no new run is created. The history is visible at `GET /v1/fixtures/{id}/runs`.
 
 ### 2.6 VotoSource
-`type VotoSource interface { Votes(ctx, facts MatchFacts) (map[PlayerID]Voto, error) }`. The engine never calls it. The shell resolves votes and passes them in as data. v1 implements `provider-rating`: Sportmonks rating 118, rounded to the nearest 0.5 and clamped to [3, 10]. Players below `min_minutes` or without a rating are s.v. A CSV import source can be added later without touching the engine.
+`type VotoSource interface { Votes(ctx, facts MatchFacts) (map[PlayerID]Voto, error) }`. The engine never calls it. The shell resolves votes and passes them in as data. v1 implements `provider-rating`: Sportmonks rating 118 **unrounded, at two-decimal precision** (`6.38`, stored as 638 hundredths). The parser rounds any extra provider digits half away from zero; nothing downstream rounds voti. Rounding to halves or whole points is a league setting (see §9). Players without a rating have no voto; whether they are s.v. is decided by the rule set (`senza_voto`). A CSV import source can be added later without touching the engine.
 
 ### 2.7 API style: REST + OpenAPI, spec-first
 `api/openapi.yaml` is the source of truth. It is written as OpenAPI **3.0.3**, not 3.1, because
@@ -74,7 +74,7 @@ the Go generator (oapi-codegen) and validator (kin-openapi) only fully support 3
 is mechanical once tooling catches up. Go server stubs are generated from it with oapi-codegen (strict server, stdlib router). Conventions are chosen so the API can open up later:
 - versioned `/v1`
 - opaque string IDs (UUIDv7, never provider ids; provider refs live in a mapping table)
-- **decimals as strings** (`"6.5"`) so third-party implementations don't hit float drift
+- **decimals as strings with exactly two digits** (`"6.38"`, `"7.00"`) so third-party implementations don't hit float drift
 - RFC 9457 `application/problem+json` errors
 - cursor pagination, once a list can grow unbounded (today every list is bounded: one matchday,
   one season of one player)
