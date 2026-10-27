@@ -1,0 +1,51 @@
+# Local stack: Postgres, a one-shot migration, and the API.
+#   docker compose up -d
+#   docker compose run --rm api ingest --season <sportmonks season id> --matchday <n>
+# Secrets (OPENFANTA_SPORTMONKS_TOKEN) go in .env, which is never committed.
+name: openfanta
+
+x-app-env: &app-env
+  OPENFANTA_DATABASE_URL: postgres://openfanta:openfanta@db:5432/openfanta?sslmode=disable
+  OPENFANTA_LOG_LEVEL: ${OPENFANTA_LOG_LEVEL:-info}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openfanta
+      POSTGRES_PASSWORD: openfanta
+      POSTGRES_DB: openfanta
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openfanta -d openfanta"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build: .
+    command: ["migrate"]
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    command: ["serve"]
+    environment: *app-env
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 20s
+
+volumes:
+  pgdata:

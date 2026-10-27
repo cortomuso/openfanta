@@ -1,0 +1,6 @@
+.git
+.direnv
+.pgdata
+bin
+coverage.*
+.env

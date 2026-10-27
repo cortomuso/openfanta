@@ -4,7 +4,7 @@ PKGS      := ./...
 CORE_PKGS := ./internal/domain/... ./internal/rules/... ./internal/timeline/... ./internal/engine/...
 CORE_MIN_COVERAGE := 95
 
-.PHONY: all build test test-all test-core cover lint gen run db-up db-down pg-start pg-stop
+.PHONY: all build test test-all test-core cover lint fmt-check gen run db-up db-down pg-start pg-stop
 
 all: lint test build
 
@@ -28,8 +28,11 @@ cover:
 	$(GO) test -coverprofile=coverage.out $(PKGS)
 	$(GO) tool cover -html=coverage.out -o coverage.html
 
-lint:
+lint: fmt-check
 	golangci-lint run
+
+fmt-check:
+	@test -z "$$(gofmt -l .)" || { gofmt -l .; echo "run gofmt -w ."; exit 1; }
 
 gen:
 	$(GO) generate ./...
