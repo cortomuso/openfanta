@@ -110,11 +110,13 @@ graceful shutdown: `serve` in `cmd/openfanta/main.go`. Upstream retries, backoff
 **Principle: the server is the source of truth for every league.** Clients author settings, line-ups and market actions. The server validates them, computes fantavoti and team results, and serves the same deterministic outcome to every member, whatever client they use.
 
 - **Entities:** league (name, season, invite code), members with roles (owner / admin / member), one fantasy team per member, rosters, matchday line-ups, competitions (league, cups).
+- **Roles:** there is no vice-admin. Admins hold every league power (settings changes, corrections, members). Only the owner can delete the league, transfer ownership, and appoint or remove admins.
 - **Line-ups** lock at the first kickoff of each matchday. The server enforces this from fixture kickoff times.
-- **Matchday lifecycle:** open → closed. On close, every input (ratings, events, line-ups, the settings version in force) is frozen into a hashed snapshot. Provider corrections after close are ignored.
+- **Matchday lifecycle:** open → closed. A matchday closes automatically N hours after its last fixture is final (N is a league setting, default 24). An admin can close it early or postpone the close. Postponed fixtures follow the stage-0 policy. On close, every input (ratings, events, line-ups, the settings version in force) is copied into a hashed snapshot, so results stay verifiable even if the provider later revises or drops its data. Provider corrections after close are ignored.
+- **Season archive:** the owner can archive a season once every matchday is closed. An archived season is read-only: no more corrections, and its stored results and snapshots are final.
 - **Rule changes are never retroactive.** A new settings version applies only from an open matchday.
 - **Closed-matchday corrections:** the owner or an admin can manually fix a closed matchday (a player's voto or event, a team score, a result). Each fix is an append-only, attributed entry (old → new, reason, time), visible to every member. It is applied as a layer on top of the frozen snapshot, and triggers a visible recompute of that matchday and the standings after it.
-- **Auth:** OpenID Connect. Users sign in with an external identity provider; the server verifies bearer tokens and keys users by issuer + subject. No passwords are stored. League roles (authorization) are OpenFanta's own.
+- **Auth:** OpenID Connect. Users sign in with an external identity provider: Google, Apple, or any issuer the operator configures (issuer URL + client ID). The server verifies bearer tokens and keys users by issuer + subject. No passwords or email magic links. League roles (authorization) are OpenFanta's own.
 - **Privacy:** store only the identity reference and a display name. On account deletion, pseudonymize the user ("deleted user", opaque ID), so the audit log stays intact.
 - **Write API conventions:** `ETag` + `If-Match` for optimistic concurrency (a stale save gets `412`); an `Idempotency-Key` header so retried actions (a line-up submission, a trade acceptance) are not applied twice; `application/problem+json` errors.
 
@@ -142,22 +144,13 @@ Roster and market rules (quotas, budget, auction type) only validate actions; th
 - `engine` versions the semantics (tie-breaks, substitution algorithms, the expression environment) and is pinned per settings version, so an engine bug fix never silently changes old results. Adopting a new engine is an explicit, logged settings change.
 - `requires` lists the features a document uses; a server that lacks one rejects the document instead of misreading it.
 - Unknown keys inside scoring modules are rejected. Client UI data goes in `meta` / `x-*`, which the engine ignores and preserves verbatim. The server stores the canonical submitted JSON, not a re-marshalled struct.
-- An optional **CEL** expression module is the escape hatch for custom rules: integer-only results, type-checked at submission, cost-limited, in a frozen environment pinned by `engine`.
+- A **CEL** expression module (`expr.cel/1`, in v1) is the escape hatch for custom rules: integer-only results, type-checked at submission, cost-limited, in a frozen environment pinned by `engine`. A document that uses it lists it in `requires`.
 
 **Determinism rules:** all values are integer hundredths; band checks compare sums (`sum ≥ from × n`) and never divide; bands use ascending lower bounds only; every "best N" selection names a tie-break; voto and fantavoto rounding (mode and step) is an explicit league setting.
 
-**Versioning and audit:** settings are stored in append-only `settings_versions` (league, seq, canonical JSON, sha256, prev_sha256, schema, engine, effective_from_matchday, author, reason). They are hash-chained, so a client that caches the head hash can detect rewritten history. Results are immutable rows keyed by (settings hash, input snapshot hash, engine version). Every result carries an explain trace (which module added how many hundredths), and every recompute publishes a member-visible diff. Stage-1 fantavoti can be computed once and shared across leagues with identical player settings and inputs; the efficiency gain must be benchmarked before relying on it.
+**Versioning and audit:** settings are stored in append-only `settings_versions` (league, seq, canonical JSON, sha256, prev_sha256, schema, engine, effective_from_matchday, author, reason). They are hash-chained, so a client that caches the head hash can detect rewritten history; for v1 that is the only tamper evidence (signed exports may follow). An engine version stays executable while any non-archived season pins it. Results are immutable rows keyed by (settings hash, input snapshot hash, engine version). Every result carries an explain trace (which module added how many hundredths), and every recompute publishes a member-visible diff. Stage-1 fantavoti can be computed once and shared across leagues with identical player settings and inputs; the efficiency gain must be benchmarked before relying on it.
 
 A full example document (a Classic league, and how Mantra fits the same structure) is in the research report.
-
-**Still open:**
-1. When does a matchday close: automatically (e.g. last fixture final + N hours), or by an admin action?
-2. Do vice-admins get admin powers (settings changes, corrections), or a subset?
-3. Ship the CEL module in v1, or after the module catalog stabilizes?
-4. How long must old engine versions stay executable (forever, or N seasons)?
-5. Ratings and events copied into the hashed snapshot (recommended), or referenced from the provider?
-6. Is a hash chain enough tamper evidence, or are signed exports / a Merkle log needed for third-party-hosted instances?
-7. Which OIDC providers to accept first, and are magic links needed too?
 
 ## 10. Decision log
 
@@ -167,3 +160,10 @@ A full example document (a Classic league, and how Mantra fits the same structur
 - **2026-10-27: no retroactive rule changes**; closed matchdays change only through logged owner/admin corrections; all inputs freeze at matchday close.
 - **2026-10-27: rounding is a league setting**; stage-1 results may be shared across leagues, pending a benchmark.
 - **2026-10-27: settings format direction:** typed versioned modules plus a CEL escape hatch, hash-chained settings history (§9).
+- **2026-10-27: matchday close** is automatic, N hours (league setting, default 24) after the last fixture is final; an admin can close early or postpone (#1).
+- **2026-10-27: no vice-admin role.** Owner / admin / member; owner-only: delete the league, transfer ownership, appoint or remove admins (#1).
+- **2026-10-27: CEL ships in v1** as `expr.cel/1` (#1).
+- **2026-10-27: engine retention:** an engine version stays executable while a non-archived season pins it; archived seasons are read-only (#1).
+- **2026-10-27: snapshots copy** ratings, events, line-ups and the settings version rather than referencing provider data (#1).
+- **2026-10-27: tamper evidence** is the settings hash chain for v1; signed exports and Merkle logs are deferred (#1).
+- **2026-10-27: identity:** OIDC with Google, Apple and operator-configured issuers; no email magic links (#1).
