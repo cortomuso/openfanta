@@ -15,7 +15,7 @@ make lint
 ```
 
 `make test-all` starts Postgres from the devshell on port 5433 (`make pg-stop` stops it).
-Tests never touch the network: provider responses come from recorded fixtures in
+Tests never touch the network: provider responses come from synthetic fixtures in
 `internal/provider/sportmonks/testdata/`.
 
 ## Running
@@ -55,6 +55,14 @@ make build
 ```
 
 `<season-id>` is the provider's season ID (for Sportmonks, the ID of Serie A 2026/2027).
+
+### Sportmonks subscription
+
+Each operator brings their own Sportmonks account and token; OpenFanta ships none. Serie A is not
+on the free plan: the cheapest plan that includes it is Starter, with Serie A as one of its
+leagues. Player ratings (type 118), line-ups and events are included in every paid plan, so no
+add-on is needed. Starter allows 2,000 requests per entity per hour; one matchday takes about a
+dozen. Players with only a few minutes may get no rating, and are then *senza voto*.
 
 ### Commands
 
