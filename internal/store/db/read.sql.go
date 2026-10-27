@@ -66,16 +66,9 @@ func (q *Queries) FixtureRuns(ctx context.Context, fixtureID uuid.UUID) ([]Fixtu
 }
 
 const fixtureScores = `-- name: FixtureScores :many
-SELECT ps.player_id, p.name AS player_name, ps.team_id, t.name AS team_name, ps.role, ps.minutes,
-       ps.voto, ps.fantavoto, ps.senza_voto, ps.voto_ufficio, ps.breakdown,
-       r.id AS run_id, r.rule_set_id, r.rule_set_version, r.voto_source, r.created_at AS computed_at
-FROM current_runs cr
-JOIN computation_runs r ON r.id = cr.run_id
-JOIN player_scores ps ON ps.run_id = r.id
-JOIN players p ON p.id = ps.player_id
-JOIN teams t ON t.id = ps.team_id
-WHERE cr.fixture_id = $1 AND cr.rule_set_id = $2 AND cr.voto_source = $3
-ORDER BY t.name, p.name, ps.player_id
+SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, run_id, rule_set_id, rule_set_version, voto_source, computed_at FROM current_scores
+WHERE fixture_id = $1 AND rule_set_id = $2 AND voto_source = $3
+ORDER BY team_name, player_name, player_id
 `
 
 type FixtureScoresParams struct {
@@ -84,40 +77,24 @@ type FixtureScoresParams struct {
 	VotoSource string
 }
 
-type FixtureScoresRow struct {
-	PlayerID       uuid.UUID
-	PlayerName     string
-	TeamID         uuid.UUID
-	TeamName       string
-	Role           string
-	Minutes        int32
-	Voto           *int32
-	Fantavoto      *int32
-	SenzaVoto      bool
-	VotoUfficio    bool
-	Breakdown      []byte
-	RunID          uuid.UUID
-	RuleSetID      string
-	RuleSetVersion string
-	VotoSource     string
-	ComputedAt     time.Time
-}
-
-// Current scores for one fixture under a rule set family and voto source.
-func (q *Queries) FixtureScores(ctx context.Context, arg FixtureScoresParams) ([]FixtureScoresRow, error) {
+func (q *Queries) FixtureScores(ctx context.Context, arg FixtureScoresParams) ([]CurrentScore, error) {
 	rows, err := q.db.Query(ctx, fixtureScores, arg.FixtureID, arg.RuleSetID, arg.VotoSource)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FixtureScoresRow
+	var items []CurrentScore
 	for rows.Next() {
-		var i FixtureScoresRow
+		var i CurrentScore
 		if err := rows.Scan(
 			&i.PlayerID,
 			&i.PlayerName,
 			&i.TeamID,
 			&i.TeamName,
+			&i.FixtureID,
+			&i.SeasonID,
+			&i.Matchday,
+			&i.Kickoff,
 			&i.Role,
 			&i.Minutes,
 			&i.Voto,
@@ -130,6 +107,360 @@ func (q *Queries) FixtureScores(ctx context.Context, arg FixtureScoresParams) ([
 			&i.RuleSetVersion,
 			&i.VotoSource,
 			&i.ComputedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFixture = `-- name: GetFixture :one
+SELECT f.id, f.kickoff, f.status, m.number AS matchday, m.season_id,
+       h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
+FROM fixtures f
+JOIN matchdays m ON m.id = f.matchday_id
+JOIN teams h ON h.id = f.home_team_id
+JOIN teams a ON a.id = f.away_team_id
+WHERE f.id = $1
+`
+
+type GetFixtureRow struct {
+	ID       uuid.UUID
+	Kickoff  *time.Time
+	Status   string
+	Matchday int32
+	SeasonID uuid.UUID
+	HomeID   uuid.UUID
+	HomeName string
+	AwayID   uuid.UUID
+	AwayName string
+}
+
+func (q *Queries) GetFixture(ctx context.Context, id uuid.UUID) (GetFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getFixture, id)
+	var i GetFixtureRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kickoff,
+		&i.Status,
+		&i.Matchday,
+		&i.SeasonID,
+		&i.HomeID,
+		&i.HomeName,
+		&i.AwayID,
+		&i.AwayName,
+	)
+	return i, err
+}
+
+const getPlayer = `-- name: GetPlayer :one
+SELECT id, name FROM players WHERE id = $1
+`
+
+func (q *Queries) GetPlayer(ctx context.Context, id uuid.UUID) (Player, error) {
+	row := q.db.QueryRow(ctx, getPlayer, id)
+	var i Player
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const getRuleSet = `-- name: GetRuleSet :one
+SELECT id, version, content_hash, body, created_at FROM rule_sets WHERE id = $1 AND version = $2
+`
+
+type GetRuleSetParams struct {
+	ID      string
+	Version string
+}
+
+func (q *Queries) GetRuleSet(ctx context.Context, arg GetRuleSetParams) (RuleSet, error) {
+	row := q.db.QueryRow(ctx, getRuleSet, arg.ID, arg.Version)
+	var i RuleSet
+	err := row.Scan(
+		&i.ID,
+		&i.Version,
+		&i.ContentHash,
+		&i.Body,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSeason = `-- name: GetSeason :one
+SELECT s.id, s.name, c.id AS competition_id, c.name AS competition_name, c.country AS competition_country
+FROM seasons s JOIN competitions c ON c.id = s.competition_id
+WHERE s.id = $1
+`
+
+type GetSeasonRow struct {
+	ID                 uuid.UUID
+	Name               string
+	CompetitionID      uuid.UUID
+	CompetitionName    string
+	CompetitionCountry string
+}
+
+func (q *Queries) GetSeason(ctx context.Context, id uuid.UUID) (GetSeasonRow, error) {
+	row := q.db.QueryRow(ctx, getSeason, id)
+	var i GetSeasonRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CompetitionID,
+		&i.CompetitionName,
+		&i.CompetitionCountry,
+	)
+	return i, err
+}
+
+const listRuleSets = `-- name: ListRuleSets :many
+SELECT id, version, content_hash, body, created_at FROM rule_sets ORDER BY id, created_at
+`
+
+func (q *Queries) ListRuleSets(ctx context.Context) ([]RuleSet, error) {
+	rows, err := q.db.Query(ctx, listRuleSets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RuleSet
+	for rows.Next() {
+		var i RuleSet
+		if err := rows.Scan(
+			&i.ID,
+			&i.Version,
+			&i.ContentHash,
+			&i.Body,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSeasons = `-- name: ListSeasons :many
+SELECT s.id, s.name, c.id AS competition_id, c.name AS competition_name, c.country AS competition_country
+FROM seasons s JOIN competitions c ON c.id = s.competition_id
+ORDER BY c.name, s.name DESC
+`
+
+type ListSeasonsRow struct {
+	ID                 uuid.UUID
+	Name               string
+	CompetitionID      uuid.UUID
+	CompetitionName    string
+	CompetitionCountry string
+}
+
+func (q *Queries) ListSeasons(ctx context.Context) ([]ListSeasonsRow, error) {
+	rows, err := q.db.Query(ctx, listSeasons)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSeasonsRow
+	for rows.Next() {
+		var i ListSeasonsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CompetitionID,
+			&i.CompetitionName,
+			&i.CompetitionCountry,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const matchdayExists = `-- name: MatchdayExists :one
+SELECT EXISTS (SELECT 1 FROM matchdays WHERE season_id = $1 AND number = $2)
+`
+
+type MatchdayExistsParams struct {
+	SeasonID uuid.UUID
+	Number   int32
+}
+
+func (q *Queries) MatchdayExists(ctx context.Context, arg MatchdayExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, matchdayExists, arg.SeasonID, arg.Number)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const matchdayScores = `-- name: MatchdayScores :many
+SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, run_id, rule_set_id, rule_set_version, voto_source, computed_at FROM current_scores
+WHERE season_id = $1 AND matchday = $2 AND rule_set_id = $3 AND voto_source = $4
+ORDER BY kickoff, fixture_id, team_name, player_name, player_id
+`
+
+type MatchdayScoresParams struct {
+	SeasonID   uuid.UUID
+	Matchday   int32
+	RuleSetID  string
+	VotoSource string
+}
+
+func (q *Queries) MatchdayScores(ctx context.Context, arg MatchdayScoresParams) ([]CurrentScore, error) {
+	rows, err := q.db.Query(ctx, matchdayScores,
+		arg.SeasonID,
+		arg.Matchday,
+		arg.RuleSetID,
+		arg.VotoSource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CurrentScore
+	for rows.Next() {
+		var i CurrentScore
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.PlayerName,
+			&i.TeamID,
+			&i.TeamName,
+			&i.FixtureID,
+			&i.SeasonID,
+			&i.Matchday,
+			&i.Kickoff,
+			&i.Role,
+			&i.Minutes,
+			&i.Voto,
+			&i.Fantavoto,
+			&i.SenzaVoto,
+			&i.VotoUfficio,
+			&i.Breakdown,
+			&i.RunID,
+			&i.RuleSetID,
+			&i.RuleSetVersion,
+			&i.VotoSource,
+			&i.ComputedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const playerSeasonScores = `-- name: PlayerSeasonScores :many
+SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, run_id, rule_set_id, rule_set_version, voto_source, computed_at FROM current_scores
+WHERE season_id = $1 AND player_id = $2 AND rule_set_id = $3 AND voto_source = $4
+ORDER BY matchday, kickoff
+`
+
+type PlayerSeasonScoresParams struct {
+	SeasonID   uuid.UUID
+	PlayerID   uuid.UUID
+	RuleSetID  string
+	VotoSource string
+}
+
+func (q *Queries) PlayerSeasonScores(ctx context.Context, arg PlayerSeasonScoresParams) ([]CurrentScore, error) {
+	rows, err := q.db.Query(ctx, playerSeasonScores,
+		arg.SeasonID,
+		arg.PlayerID,
+		arg.RuleSetID,
+		arg.VotoSource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CurrentScore
+	for rows.Next() {
+		var i CurrentScore
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.PlayerName,
+			&i.TeamID,
+			&i.TeamName,
+			&i.FixtureID,
+			&i.SeasonID,
+			&i.Matchday,
+			&i.Kickoff,
+			&i.Role,
+			&i.Minutes,
+			&i.Voto,
+			&i.Fantavoto,
+			&i.SenzaVoto,
+			&i.VotoUfficio,
+			&i.Breakdown,
+			&i.RunID,
+			&i.RuleSetID,
+			&i.RuleSetVersion,
+			&i.VotoSource,
+			&i.ComputedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const seasonFixtures = `-- name: SeasonFixtures :many
+SELECT m.number AS matchday, f.id, f.kickoff, f.status,
+       h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
+FROM matchdays m
+JOIN fixtures f ON f.matchday_id = m.id
+JOIN teams h ON h.id = f.home_team_id
+JOIN teams a ON a.id = f.away_team_id
+WHERE m.season_id = $1
+ORDER BY m.number, f.kickoff, f.id
+`
+
+type SeasonFixturesRow struct {
+	Matchday int32
+	ID       uuid.UUID
+	Kickoff  *time.Time
+	Status   string
+	HomeID   uuid.UUID
+	HomeName string
+	AwayID   uuid.UUID
+	AwayName string
+}
+
+func (q *Queries) SeasonFixtures(ctx context.Context, seasonID uuid.UUID) ([]SeasonFixturesRow, error) {
+	rows, err := q.db.Query(ctx, seasonFixtures, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SeasonFixturesRow
+	for rows.Next() {
+		var i SeasonFixturesRow
+		if err := rows.Scan(
+			&i.Matchday,
+			&i.ID,
+			&i.Kickoff,
+			&i.Status,
+			&i.HomeID,
+			&i.HomeName,
+			&i.AwayID,
+			&i.AwayName,
 		); err != nil {
 			return nil, err
 		}

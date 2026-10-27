@@ -37,6 +37,29 @@ type CurrentRun struct {
 	RunID      uuid.UUID
 }
 
+type CurrentScore struct {
+	PlayerID       uuid.UUID
+	PlayerName     string
+	TeamID         uuid.UUID
+	TeamName       string
+	FixtureID      uuid.UUID
+	SeasonID       uuid.UUID
+	Matchday       int32
+	Kickoff        *time.Time
+	Role           string
+	Minutes        int32
+	Voto           *int32
+	Fantavoto      *int32
+	SenzaVoto      bool
+	VotoUfficio    bool
+	Breakdown      []byte
+	RunID          uuid.UUID
+	RuleSetID      string
+	RuleSetVersion string
+	VotoSource     string
+	ComputedAt     time.Time
+}
+
 type Fixture struct {
 	ID         uuid.UUID
 	MatchdayID uuid.UUID

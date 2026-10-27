@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -19,6 +17,7 @@ import (
 
 	"github.com/openfanta/openfanta/internal/provider/httpx"
 	"github.com/openfanta/openfanta/internal/provider/sportmonks"
+	"github.com/openfanta/openfanta/internal/provider/sportmonks/smtest"
 	"github.com/openfanta/openfanta/internal/rules"
 	"github.com/openfanta/openfanta/internal/store"
 	"github.com/openfanta/openfanta/internal/store/db"
@@ -27,58 +26,6 @@ import (
 )
 
 var ctx = context.Background()
-
-// upstream serves the Sportmonks test fixtures and counts requests per path.
-type upstream struct {
-	mu       sync.Mutex
-	files    map[string]string // request path -> body
-	requests map[string]int
-}
-
-func newUpstream(t *testing.T) (*upstream, *httptest.Server) {
-	t.Helper()
-	read := func(name string) string {
-		b, err := os.ReadFile(filepath.Join("..", "provider", "sportmonks", "testdata", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(b)
-	}
-	u := &upstream{
-		files: map[string]string{
-			"/seasons/777":           read("season_777.json"),
-			"/schedules/seasons/777": read("schedule_777.json"),
-			"/fixtures/5001":         read("fixture_5001_ft.json"),
-		},
-		requests: map[string]int{},
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		u.mu.Lock()
-		defer u.mu.Unlock()
-		u.requests[r.URL.Path]++
-		body, ok := u.files[r.URL.Path]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = io.WriteString(w, `{"message":"not found"}`)
-			return
-		}
-		_, _ = io.WriteString(w, body)
-	}))
-	t.Cleanup(srv.Close)
-	return u, srv
-}
-
-func (u *upstream) set(path, body string) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.files[path] = body
-}
-
-func (u *upstream) count(path string) int {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return u.requests[path]
-}
 
 func newService(t *testing.T, st *store.Store, srv *httptest.Server, reg *rules.Registry) *Service {
 	t.Helper()
@@ -131,7 +78,7 @@ func scores(t *testing.T, st *store.Store, fixture uuid.UUID) map[string]scoreVi
 
 func TestIngestMatchdayEndToEnd(t *testing.T) {
 	st, _ := storetest.New(t)
-	up, srv := newUpstream(t)
+	up, srv := smtest.New(t)
 	svc := newService(t, st, srv, builtin(t))
 
 	rep, err := svc.IngestMatchday(ctx, "777", 1, Options{})
@@ -188,17 +135,17 @@ func TestIngestMatchdayEndToEnd(t *testing.T) {
 			t.Errorf("re-ingest = %+v", f)
 		}
 	}
-	if n := up.count("/fixtures/5001"); n != 1 {
+	if n := up.Count("/fixtures/5001"); n != 1 {
 		t.Errorf("finished fixture fetched %d times, want 1", n)
 	}
-	if n := up.count("/seasons/777") + up.count("/schedules/seasons/777"); n != 2 {
+	if n := up.Count("/seasons/777") + up.Count("/schedules/seasons/777"); n != 2 {
 		t.Errorf("season and schedule fetched %d times, want 2 (cached)", n)
 	}
 }
 
 func TestCorrectedUpstreamEventCreatesAuditableRun(t *testing.T) {
 	st, _ := storetest.New(t)
-	up, srv := newUpstream(t)
+	up, srv := smtest.New(t)
 	svc := newService(t, st, srv, builtin(t))
 	rep, err := svc.IngestMatchday(ctx, "777", 1, Options{})
 	if err != nil {
@@ -210,7 +157,7 @@ func TestCorrectedUpstreamEventCreatesAuditableRun(t *testing.T) {
 	}
 
 	// Upstream corrects the first goal: no assist after all.
-	b, _ := os.ReadFile(filepath.Join("..", "provider", "sportmonks", "testdata", "fixture_5001_ft.json"))
+	b := []byte(smtest.Fixture(t, "fixture_5001_ft.json"))
 	var doc map[string]any
 	if err := json.Unmarshal(b, &doc); err != nil {
 		t.Fatal(err)
@@ -228,7 +175,7 @@ func TestCorrectedUpstreamEventCreatesAuditableRun(t *testing.T) {
 	}
 	out, _ := json.Marshal(doc)
 	corrected := string(out)
-	up.set("/fixtures/5001", corrected)
+	up.Set("/fixtures/5001", corrected)
 
 	rep, err = svc.IngestMatchday(ctx, "777", 1, Options{Refresh: true})
 	if err != nil {
@@ -253,10 +200,9 @@ func TestCorrectedUpstreamEventCreatesAuditableRun(t *testing.T) {
 
 func TestLiveFixtureIsNotScoredUntilFinal(t *testing.T) {
 	st, _ := storetest.New(t)
-	up, srv := newUpstream(t)
-	b, _ := os.ReadFile(filepath.Join("..", "provider", "sportmonks", "testdata", "fixture_5001_live.json"))
-	ft := up.files["/fixtures/5001"]
-	up.set("/fixtures/5001", string(b))
+	up, srv := smtest.New(t)
+	ft := smtest.Fixture(t, "fixture_5001_ft.json")
+	up.Set("/fixtures/5001", smtest.Fixture(t, "fixture_5001_live.json"))
 	svc := newService(t, st, srv, builtin(t))
 
 	rep, _ := svc.IngestMatchday(ctx, "777", 1, Options{})
@@ -265,7 +211,7 @@ func TestLiveFixtureIsNotScoredUntilFinal(t *testing.T) {
 			t.Fatalf("live fixture = %+v", f)
 		}
 	}
-	up.set("/fixtures/5001", ft)
+	up.Set("/fixtures/5001", ft)
 	rep, _ = svc.IngestMatchday(ctx, "777", 1, Options{})
 	for _, f := range rep.Fixtures {
 		if f.Ref == "5001" && (!f.Final || f.RunsCreated != 1 || f.FromCache) {
@@ -276,7 +222,7 @@ func TestLiveFixtureIsNotScoredUntilFinal(t *testing.T) {
 
 func TestRecomputeWithNewRuleSetVersion(t *testing.T) {
 	st, _ := storetest.New(t)
-	_, srv := newUpstream(t)
+	_, srv := smtest.New(t)
 	svc := newService(t, st, srv, builtin(t))
 	if _, err := svc.IngestMatchday(ctx, "777", 1, Options{}); err != nil {
 		t.Fatal(err)
@@ -317,7 +263,7 @@ func TestRecomputeWithNewRuleSetVersion(t *testing.T) {
 
 func TestUnknownMatchday(t *testing.T) {
 	st, _ := storetest.New(t)
-	_, srv := newUpstream(t)
+	_, srv := smtest.New(t)
 	svc := newService(t, st, srv, builtin(t))
 	if _, err := svc.IngestMatchday(ctx, "777", 38, Options{}); err == nil {
 		t.Fatal("expected an error for a matchday without fixtures")

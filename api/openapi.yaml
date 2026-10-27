@@ -1,0 +1,388 @@
+openapi: 3.0.3
+info:
+  title: OpenFanta API
+  version: 0.1.0
+  description: |
+    Read-only access to fantacalcio voti and fantavoti computed by OpenFanta.
+
+    Conventions:
+    - IDs are opaque strings (UUIDs). Never rely on their structure.
+    - Scores (`voto`, `fantavoto`, breakdown `points`) are **decimal strings** such as `"6.5"`,
+      so no client ever parses a float. They have at most two fractional digits.
+    - Rule set bodies are returned as published: point values there are integer hundredths.
+    - Errors use RFC 9457 `application/problem+json`.
+    - Responses carry an `ETag`; send `If-None-Match` to get `304 Not Modified`.
+  license:
+    name: To be decided
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: health
+  - name: scores
+  - name: catalog
+  - name: rulesets
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      operationId: getHealth
+      summary: Liveness probe
+      responses:
+        "200":
+          description: The process is up.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /readyz:
+    get:
+      tags: [health]
+      operationId: getReady
+      summary: Readiness probe (checks the database)
+      responses:
+        "200":
+          description: Ready to serve traffic.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          $ref: "#/components/responses/Problem"
+
+  /v1/rulesets:
+    get:
+      tags: [rulesets]
+      operationId: listRuleSets
+      summary: List every published rule set version
+      responses:
+        "200":
+          description: Rule sets, ordered by id then publication time.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rulesets]
+                properties:
+                  rulesets:
+                    type: array
+                    items: { $ref: "#/components/schemas/RuleSetSummary" }
+  /v1/rulesets/{rulesetId}/versions/{version}:
+    get:
+      tags: [rulesets]
+      operationId: getRuleSet
+      summary: Get one rule set version, as published
+      parameters:
+        - { name: rulesetId, in: path, required: true, schema: { type: string } }
+        - { name: version, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The rule set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RuleSet" }
+        "404":
+          $ref: "#/components/responses/Problem"
+
+  /v1/seasons:
+    get:
+      tags: [catalog]
+      operationId: listSeasons
+      summary: List seasons
+      responses:
+        "200":
+          description: Seasons with ingested data.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [seasons]
+                properties:
+                  seasons:
+                    type: array
+                    items: { $ref: "#/components/schemas/Season" }
+  /v1/seasons/{seasonId}/matchdays:
+    get:
+      tags: [catalog]
+      operationId: listMatchdays
+      summary: List a season's matchdays and fixtures
+      parameters:
+        - $ref: "#/components/parameters/SeasonId"
+      responses:
+        "200":
+          description: Matchdays in order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [season, matchdays]
+                properties:
+                  season: { $ref: "#/components/schemas/Season" }
+                  matchdays:
+                    type: array
+                    items: { $ref: "#/components/schemas/Matchday" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /v1/seasons/{seasonId}/matchdays/{number}/scores:
+    get:
+      tags: [scores]
+      operationId: getMatchdayScores
+      summary: Voti and fantavoti for every player of a matchday
+      parameters:
+        - $ref: "#/components/parameters/SeasonId"
+        - { name: number, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - $ref: "#/components/parameters/RuleSetQuery"
+        - $ref: "#/components/parameters/VotoSourceQuery"
+      responses:
+        "200":
+          description: Scores, ordered by fixture kickoff, team and player name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScoreList" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /v1/seasons/{seasonId}/players/{playerId}/scores:
+    get:
+      tags: [scores]
+      operationId: getPlayerSeasonScores
+      summary: A player's voti and fantavoti across a season
+      parameters:
+        - $ref: "#/components/parameters/SeasonId"
+        - $ref: "#/components/parameters/PlayerId"
+        - $ref: "#/components/parameters/RuleSetQuery"
+        - $ref: "#/components/parameters/VotoSourceQuery"
+      responses:
+        "200":
+          description: Scores ordered by matchday.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScoreList" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /v1/fixtures/{fixtureId}/scores:
+    get:
+      tags: [scores]
+      operationId: getFixtureScores
+      summary: Voti and fantavoti for every player of a fixture
+      parameters:
+        - $ref: "#/components/parameters/FixtureId"
+        - $ref: "#/components/parameters/RuleSetQuery"
+        - $ref: "#/components/parameters/VotoSourceQuery"
+      responses:
+        "200":
+          description: Scores ordered by team and player name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScoreList" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /v1/fixtures/{fixtureId}/runs:
+    get:
+      tags: [scores]
+      operationId: getFixtureRuns
+      summary: Audit trail of every computation of a fixture
+      parameters:
+        - $ref: "#/components/parameters/FixtureId"
+      responses:
+        "200":
+          description: Runs, oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fixture, runs]
+                properties:
+                  fixture: { $ref: "#/components/schemas/Fixture" }
+                  runs:
+                    type: array
+                    items: { $ref: "#/components/schemas/Run" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /v1/players/{playerId}:
+    get:
+      tags: [catalog]
+      operationId: getPlayer
+      summary: Get a player
+      parameters:
+        - $ref: "#/components/parameters/PlayerId"
+      responses:
+        "200":
+          description: The player.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ref" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+
+components:
+  parameters:
+    SeasonId:
+      { name: seasonId, in: path, required: true, schema: { type: string, format: uuid } }
+    PlayerId:
+      { name: playerId, in: path, required: true, schema: { type: string, format: uuid } }
+    FixtureId:
+      { name: fixtureId, in: path, required: true, schema: { type: string, format: uuid } }
+    RuleSetQuery:
+      name: ruleset
+      in: query
+      description: Rule set family. The latest computed version is served.
+      schema: { type: string, default: classic }
+    VotoSourceQuery:
+      name: voto_source
+      in: query
+      description: Where base voti come from.
+      schema: { type: string, default: provider-rating }
+  responses:
+    Problem:
+      description: An error, as RFC 9457 problem details.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, example: ok }
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, example: about:blank }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+    Decimal:
+      type: string
+      pattern: "^-?[0-9]+(\\.[0-9]{1,2})?$"
+      example: "6.5"
+    Ref:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+    Season:
+      type: object
+      required: [id, name, competition]
+      properties:
+        id: { type: string }
+        name: { type: string, example: 2026/2027 }
+        competition:
+          type: object
+          required: [id, name, country]
+          properties:
+            id: { type: string }
+            name: { type: string }
+            country: { type: string }
+    Fixture:
+      type: object
+      required: [id, matchday, status, home, away]
+      properties:
+        id: { type: string }
+        matchday: { type: integer }
+        kickoff: { type: string, format: date-time, nullable: true }
+        status: { type: string, description: "Provider status, e.g. FT" }
+        home: { $ref: "#/components/schemas/Ref" }
+        away: { $ref: "#/components/schemas/Ref" }
+    Matchday:
+      type: object
+      required: [number, fixtures]
+      properties:
+        number: { type: integer }
+        fixtures:
+          type: array
+          items: { $ref: "#/components/schemas/Fixture" }
+    BreakdownItem:
+      type: object
+      required: [code, count, points]
+      properties:
+        code: { type: string, example: goal, description: "A rule set scoring key" }
+        count: { type: integer, minimum: 1 }
+        points: { $ref: "#/components/schemas/Decimal" }
+    RunRef:
+      type: object
+      required: [id, ruleset, ruleset_version, voto_source, computed_at]
+      properties:
+        id: { type: string }
+        ruleset: { type: string }
+        ruleset_version: { type: string }
+        voto_source: { type: string }
+        computed_at: { type: string, format: date-time }
+    Score:
+      type: object
+      required: [player, team, fixture_id, matchday, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, run]
+      properties:
+        player: { $ref: "#/components/schemas/Ref" }
+        team: { $ref: "#/components/schemas/Ref" }
+        fixture_id: { type: string }
+        matchday: { type: integer }
+        role: { type: string, enum: [goalkeeper, outfield] }
+        minutes: { type: integer }
+        voto:
+          allOf: [{ $ref: "#/components/schemas/Decimal" }]
+          nullable: true
+          description: Base voto; null when senza voto.
+        fantavoto:
+          allOf: [{ $ref: "#/components/schemas/Decimal" }]
+          nullable: true
+          description: voto plus the sum of the breakdown; null when senza voto.
+        senza_voto: { type: boolean }
+        voto_ufficio: { type: boolean, description: "The voto was assigned by a senza voto rule" }
+        breakdown:
+          type: array
+          items: { $ref: "#/components/schemas/BreakdownItem" }
+        run: { $ref: "#/components/schemas/RunRef" }
+    ScoreList:
+      type: object
+      required: [ruleset, voto_source, scores]
+      properties:
+        ruleset: { type: string }
+        voto_source: { type: string }
+        scores:
+          type: array
+          items: { $ref: "#/components/schemas/Score" }
+    Run:
+      type: object
+      required: [id, ruleset, ruleset_version, voto_source, engine_version, input_hash, reason, created_at, current]
+      properties:
+        id: { type: string }
+        ruleset: { type: string }
+        ruleset_version: { type: string }
+        voto_source: { type: string }
+        engine_version: { type: string }
+        input_hash: { type: string }
+        supersedes: { type: string, nullable: true }
+        reason: { type: string }
+        created_at: { type: string, format: date-time }
+        current: { type: boolean }
+    RuleSetSummary:
+      type: object
+      required: [id, version, name, content_hash, published_at]
+      properties:
+        id: { type: string }
+        version: { type: string }
+        name: { type: string }
+        content_hash: { type: string }
+        published_at: { type: string, format: date-time }
+    RuleSet:
+      type: object
+      required: [id, version, content_hash, published_at, body]
+      properties:
+        id: { type: string }
+        version: { type: string }
+        content_hash: { type: string }
+        published_at: { type: string, format: date-time }
+        body:
+          type: object
+          additionalProperties: true
+          description: The rule set as published; see rulesets/schema.json. Point values are integer hundredths.

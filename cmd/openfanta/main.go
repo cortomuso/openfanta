@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/time/rate"
 
+	"github.com/openfanta/openfanta/internal/api"
 	"github.com/openfanta/openfanta/internal/config"
 	"github.com/openfanta/openfanta/internal/ingest"
 	"github.com/openfanta/openfanta/internal/provider/httpx"
@@ -29,6 +32,7 @@ import (
 const usage = `usage: openfanta <command> [flags]
 
 commands:
+  serve       serve the read-only HTTP API
   migrate     apply database migrations
   ingest      fetch one matchday from the provider and compute fantavoti
   recompute   recompute stored fixtures under the current rule sets
@@ -61,6 +65,8 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	log := cfg.Logger()
 	cmd, rest := args[0], args[1:]
 	switch cmd {
+	case "serve":
+		return runServe(ctx, cfg, log)
 	case "migrate":
 		if err := cfg.RequireDatabase(); err != nil {
 			return err
@@ -219,5 +225,66 @@ func printReport(w io.Writer, rep ingest.Report) error {
 	if rep.Failed() > 0 {
 		return fmt.Errorf("%d fixtures failed", rep.Failed())
 	}
+	return nil
+}
+
+func runServe(ctx context.Context, cfg config.Config, log *slog.Logger) error {
+	if err := cfg.RequireDatabase(); err != nil {
+		return err
+	}
+	if cfg.MigrateOnStartup {
+		if err := store.Migrate(ctx, cfg.DatabaseURL); err != nil {
+			return err
+		}
+	}
+	reg, err := loadRules(cfg)
+	if err != nil {
+		return err
+	}
+	st, err := store.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	if err := st.SyncRuleSets(ctx, reg.All()); err != nil {
+		return err
+	}
+	ln, err := net.Listen("tcp", cfg.HTTPAddr)
+	if err != nil {
+		return err
+	}
+	return serve(ctx, ln, api.NewHandler(api.NewServer(st.Queries(), st.Ping), log), cfg.ShutdownTimeout, log)
+}
+
+// serve runs srv on ln until ctx is cancelled, then drains in-flight requests
+// for up to grace before returning.
+func serve(ctx context.Context, ln net.Listener, h http.Handler, grace time.Duration, log *slog.Logger) error {
+	srv := &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
+	}
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Serve(ln) }()
+	log.InfoContext(ctx, "listening", "addr", ln.Addr().String())
+
+	select {
+	case err := <-errc:
+		return err
+	case <-ctx.Done():
+	}
+	log.Info("shutting down", "grace", grace)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), grace)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("graceful shutdown: %w", err)
+	}
+	if err := <-errc; !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	log.Info("stopped")
 	return nil
 }

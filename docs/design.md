@@ -68,13 +68,16 @@ JSONB for raw payloads and breakdowns, a single SQL dialect, and concurrent inge
 ### 2.6 VotoSource
 `type VotoSource interface { Votes(ctx, facts MatchFacts) (map[PlayerID]Voto, error) }`. The engine never calls it. The shell resolves votes and passes them in as data. v1 implements `provider-rating`: Sportmonks rating 118, rounded to the nearest 0.5 and clamped to [3, 10]. Players below `min_minutes` or without a rating are s.v. A CSV import source can be added later without touching the engine.
 
-### 2.7 API style: REST + OpenAPI 3.1, spec-first
-`api/openapi.yaml` is the source of truth. Go server stubs are generated from it with oapi-codegen (strict server, stdlib router). Conventions are chosen so the API can open up later:
+### 2.7 API style: REST + OpenAPI, spec-first
+`api/openapi.yaml` is the source of truth. It is written as OpenAPI **3.0.3**, not 3.1, because
+the Go generator (oapi-codegen) and validator (kin-openapi) only fully support 3.0. Moving to 3.1
+is mechanical once tooling catches up. Go server stubs are generated from it with oapi-codegen (strict server, stdlib router). Conventions are chosen so the API can open up later:
 - versioned `/v1`
 - opaque string IDs (UUIDv7, never provider ids; provider refs live in a mapping table)
 - **decimals as strings** (`"6.5"`) so third-party implementations don't hit float drift
 - RFC 9457 `application/problem+json` errors
-- cursor pagination
+- cursor pagination, once a list can grow unbounded (today every list is bounded: one matchday,
+  one season of one player)
 - `ETag` / `Cache-Control`
 
 Endpoints:
@@ -83,7 +86,7 @@ GET /healthz, /readyz
 GET /v1/rulesets                      GET /v1/rulesets/{id}/versions/{version}
 GET /v1/seasons                       GET /v1/seasons/{seasonId}/matchdays
 GET /v1/seasons/{seasonId}/matchdays/{n}/scores?ruleset=classic
-GET /v1/seasons/{seasonId}/players/{playerId}/scores?ruleset=classic
+GET /v1/seasons/{seasonId}/players/{playerId}/scores?ruleset=classic&voto_source=provider-rating
 GET /v1/fixtures/{fixtureId}/scores   GET /v1/fixtures/{fixtureId}/runs
 GET /v1/players/{playerId}
 ```

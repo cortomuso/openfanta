@@ -4,8 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestUsage(t *testing.T) {
@@ -73,5 +78,71 @@ func TestCommandsRequireConfiguration(t *testing.T) {
 	t.Setenv("OPENFANTA_LOG_LEVEL", "loud")
 	if err := run(context.Background(), []string{"rulesets"}, &out); err == nil {
 		t.Error("invalid config should fail")
+	}
+}
+
+func TestServeDrainsInFlightRequestsOnShutdown(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		time.Sleep(200 * time.Millisecond)
+		_, _ = w.Write([]byte("done"))
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- serve(ctx, ln, h, 5*time.Second, slog.New(slog.NewTextHandler(io.Discard, nil))) }()
+
+	got := make(chan string, 1)
+	go func() {
+		resp, err := http.Get("http://" + ln.Addr().String() + "/")
+		if err != nil {
+			got <- "error: " + err.Error()
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, _ := io.ReadAll(resp.Body)
+		got <- string(b)
+	}()
+	<-started
+	cancel() // like SIGTERM while a request is in flight
+
+	if body := <-got; body != "done" {
+		t.Errorf("in-flight request got %q, want it to complete", body)
+	}
+	if err := <-served; err != nil {
+		t.Errorf("serve returned %v", err)
+	}
+	if _, err := http.Get("http://" + ln.Addr().String() + "/"); err == nil {
+		t.Error("server still accepting connections after shutdown")
+	}
+}
+
+func TestServeShutdownTimeout(t *testing.T) {
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	block := make(chan struct{})
+	defer close(block)
+	started := make(chan struct{})
+	h := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { close(started); <-block })
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() {
+		served <- serve(ctx, ln, h, 50*time.Millisecond, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}()
+	go func() { _, _ = http.Get("http://" + ln.Addr().String() + "/") }()
+	<-started
+	cancel()
+	if err := <-served; err == nil || !strings.Contains(err.Error(), "graceful shutdown") {
+		t.Errorf("serve = %v, want a graceful shutdown timeout", err)
+	}
+}
+
+func TestServeRequiresDatabase(t *testing.T) {
+	t.Setenv("OPENFANTA_DATABASE_URL", "")
+	if err := run(context.Background(), []string{"serve"}, io.Discard); err == nil {
+		t.Error("serve without a database should fail")
 	}
 }
