@@ -38,26 +38,35 @@ type CurrentRun struct {
 }
 
 type CurrentScore struct {
-	PlayerID       uuid.UUID
-	PlayerName     string
-	TeamID         uuid.UUID
-	TeamName       string
-	FixtureID      uuid.UUID
-	SeasonID       uuid.UUID
-	Matchday       int32
-	Kickoff        *time.Time
-	Role           string
-	Minutes        int32
-	Voto           *int32
-	Fantavoto      *int32
-	SenzaVoto      bool
-	VotoUfficio    bool
-	Breakdown      []byte
-	RunID          uuid.UUID
-	RuleSetID      string
-	RuleSetVersion string
-	VotoSource     string
-	ComputedAt     time.Time
+	PlayerID        uuid.UUID
+	PlayerName      string
+	TeamID          uuid.UUID
+	TeamName        string
+	FixtureID       uuid.UUID
+	SeasonID        uuid.UUID
+	Matchday        int32
+	Kickoff         *time.Time
+	Role            string
+	Minutes         int32
+	Voto            *int32
+	Fantavoto       *int32
+	SenzaVoto       bool
+	VotoUfficio     bool
+	Breakdown       []byte
+	Goals           int32
+	PenaltiesScored int32
+	PenaltiesMissed int32
+	PenaltiesSaved  int32
+	OwnGoals        int32
+	Assists         int32
+	YellowCards     int32
+	SentOff         bool
+	GoalsConceded   int32
+	RunID           uuid.UUID
+	RuleSetID       string
+	RuleSetVersion  string
+	VotoSource      string
+	ComputedAt      time.Time
 }
 
 type Fixture struct {
@@ -91,16 +100,25 @@ type Player struct {
 }
 
 type PlayerScore struct {
-	RunID       uuid.UUID
-	PlayerID    uuid.UUID
-	TeamID      uuid.UUID
-	Role        string
-	Minutes     int32
-	Voto        *int32
-	Fantavoto   *int32
-	SenzaVoto   bool
-	VotoUfficio bool
-	Breakdown   []byte
+	RunID           uuid.UUID
+	PlayerID        uuid.UUID
+	TeamID          uuid.UUID
+	Role            string
+	Minutes         int32
+	Voto            *int32
+	Fantavoto       *int32
+	SenzaVoto       bool
+	VotoUfficio     bool
+	Breakdown       []byte
+	Goals           int32
+	PenaltiesScored int32
+	PenaltiesMissed int32
+	PenaltiesSaved  int32
+	OwnGoals        int32
+	Assists         int32
+	YellowCards     int32
+	SentOff         bool
+	GoalsConceded   int32
 }
 
 type ProviderRef struct {

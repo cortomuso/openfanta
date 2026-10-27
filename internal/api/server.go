@@ -300,6 +300,11 @@ func score(r db.CurrentScore) (Score, error) {
 		Player: Ref{Id: r.PlayerID.String(), Name: r.PlayerName}, Team: Ref{Id: r.TeamID.String(), Name: r.TeamName},
 		FixtureId: r.FixtureID.String(), Matchday: int(r.Matchday), Role: ScoreRole(r.Role), Minutes: int(r.Minutes),
 		Voto: decimal(r.Voto), Fantavoto: decimal(r.Fantavoto), SenzaVoto: r.SenzaVoto, VotoUfficio: r.VotoUfficio,
+		Stats: PlayerMatchStats{
+			Goals: int(r.Goals), PenaltiesScored: int(r.PenaltiesScored), PenaltiesMissed: int(r.PenaltiesMissed),
+			PenaltiesSaved: int(r.PenaltiesSaved), OwnGoals: int(r.OwnGoals), Assists: int(r.Assists),
+			YellowCards: int(r.YellowCards), SentOff: r.SentOff, GoalsConceded: int(r.GoalsConceded),
+		},
 		Breakdown: breakdown,
 		Run:       RunRef{Id: r.RunID.String(), Ruleset: r.RuleSetID, RulesetVersion: r.RuleSetVersion, VotoSource: r.VotoSource, ComputedAt: r.ComputedAt},
 	}, nil

@@ -302,6 +302,10 @@ func scoreRows(runID uuid.UUID, scores []engine.Score) ([]db.InsertPlayerScoresP
 			RunID: runID, PlayerID: player, TeamID: team, Role: string(sc.Line.Role),
 			Minutes: int32(sc.Line.Minutes), Voto: toInt32(sc.Voto), Fantavoto: toInt32(sc.Fantavoto),
 			SenzaVoto: sc.SenzaVoto, VotoUfficio: sc.VotoUfficio, Breakdown: b,
+			Goals: int32(sc.Line.Goals), PenaltiesScored: int32(sc.Line.PenaltiesScored),
+			PenaltiesMissed: int32(sc.Line.PenaltiesMissed), PenaltiesSaved: int32(sc.Line.PenaltiesSaved),
+			OwnGoals: int32(sc.Line.OwnGoals), Assists: int32(sc.Line.Assists),
+			YellowCards: int32(sc.Line.YellowCards), SentOff: sc.Line.SentOff, GoalsConceded: int32(sc.Line.GoalsConceded),
 		})
 	}
 	return rows, nil

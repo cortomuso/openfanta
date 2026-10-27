@@ -321,7 +321,7 @@ components:
         computed_at: { type: string, format: date-time }
     Score:
       type: object
-      required: [player, team, fixture_id, matchday, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, run]
+      required: [player, team, fixture_id, matchday, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, stats, breakdown, run]
       properties:
         player: { $ref: "#/components/schemas/Ref" }
         team: { $ref: "#/components/schemas/Ref" }
@@ -339,10 +339,25 @@ components:
           description: voto plus the sum of the breakdown; null when senza voto.
         senza_voto: { type: boolean }
         voto_ufficio: { type: boolean, description: "The voto was assigned by a senza voto rule" }
+        stats: { $ref: "#/components/schemas/PlayerMatchStats" }
         breakdown:
           type: array
           items: { $ref: "#/components/schemas/BreakdownItem" }
         run: { $ref: "#/components/schemas/RunRef" }
+    PlayerMatchStats:
+      type: object
+      description: What the player did in the match, as derived from provider events. Shoot-outs never count.
+      required: [goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded]
+      properties:
+        goals: { type: integer, minimum: 0, description: "Goals scored, excluding penalties" }
+        penalties_scored: { type: integer, minimum: 0 }
+        penalties_missed: { type: integer, minimum: 0, description: "Penalties taken and not scored, including those saved by the keeper" }
+        penalties_saved: { type: integer, minimum: 0, description: "Penalties saved, as the goalkeeper" }
+        own_goals: { type: integer, minimum: 0 }
+        assists: { type: integer, minimum: 0 }
+        yellow_cards: { type: integer, minimum: 0, description: "Includes a second yellow" }
+        sent_off: { type: boolean, description: "Sent off by a straight red or a second yellow" }
+        goals_conceded: { type: integer, minimum: 0, description: "Goals the player's team conceded while the player was on the pitch, own goals included" }
     ScoreList:
       type: object
       required: [ruleset, voto_source, scores]

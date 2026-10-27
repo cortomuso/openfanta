@@ -150,6 +150,18 @@ func TestBrowseAndScores(t *testing.T) {
 	if mid := by["Home Midfielder"]; *mid.Fantavoto != "2.60" {
 		t.Errorf("Home Midfielder fantavoto = %s", *mid.Fantavoto)
 	}
+	if got := striker.Stats; got != (api.PlayerMatchStats{Goals: 1, Assists: 1, GoalsConceded: 1}) {
+		t.Errorf("Home Striker stats = %+v", got)
+	}
+	if got := by["Home Keeper"].Stats; got != (api.PlayerMatchStats{PenaltiesSaved: 1, GoalsConceded: 1}) {
+		t.Errorf("Home Keeper stats = %+v", got)
+	}
+	if got := by["Away Defender"].Stats; got != (api.PlayerMatchStats{YellowCards: 2, SentOff: true, GoalsConceded: 1}) {
+		t.Errorf("Away Defender stats = %+v", got)
+	}
+	if got := by["Away Striker"].Stats; got != (api.PlayerMatchStats{PenaltiesScored: 1, PenaltiesMissed: 1, GoalsConceded: 3}) {
+		t.Errorf("Away Striker stats = %+v", got)
+	}
 
 	var fx api.ScoreList
 	f.get("/v1/fixtures/"+fixtureID+"/scores", 200, &fx)

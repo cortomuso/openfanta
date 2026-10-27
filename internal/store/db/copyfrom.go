@@ -39,6 +39,15 @@ func (r iteratorForInsertPlayerScores) Values() ([]interface{}, error) {
 		r.rows[0].SenzaVoto,
 		r.rows[0].VotoUfficio,
 		r.rows[0].Breakdown,
+		r.rows[0].Goals,
+		r.rows[0].PenaltiesScored,
+		r.rows[0].PenaltiesMissed,
+		r.rows[0].PenaltiesSaved,
+		r.rows[0].OwnGoals,
+		r.rows[0].Assists,
+		r.rows[0].YellowCards,
+		r.rows[0].SentOff,
+		r.rows[0].GoalsConceded,
 	}, nil
 }
 
@@ -47,5 +56,5 @@ func (r iteratorForInsertPlayerScores) Err() error {
 }
 
 func (q *Queries) InsertPlayerScores(ctx context.Context, arg []InsertPlayerScoresParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"player_scores"}, []string{"run_id", "player_id", "team_id", "role", "minutes", "voto", "fantavoto", "senza_voto", "voto_ufficio", "breakdown"}, &iteratorForInsertPlayerScores{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"player_scores"}, []string{"run_id", "player_id", "team_id", "role", "minutes", "voto", "fantavoto", "senza_voto", "voto_ufficio", "breakdown", "goals", "penalties_scored", "penalties_missed", "penalties_saved", "own_goals", "assists", "yellow_cards", "sent_off", "goals_conceded"}, &iteratorForInsertPlayerScores{rows: arg})
 }
