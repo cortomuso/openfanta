@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -30,7 +31,7 @@ var Engines = []string{"2026.10"}
 
 // Features lists the `requires` identifiers this build supports. A document
 // that requires anything else is rejected instead of being misread.
-var Features = []string{"scoring.penalty_mode"}
+var Features = []string{"scoring.penalty_mode", ExprModule}
 
 //go:embed schema/v1.json
 var schemaJSON []byte
@@ -70,6 +71,16 @@ type Document struct {
 	Game     string   `json:"game"`
 	Roles    *Roles   `json:"roles"`
 	Player   Player   `json:"player"`
+	Team     []Module `json:"team"`
+}
+
+// Module is one custom rule of the team stage. Only expr.cel/1 exists so far.
+type Module struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	Stage       string `json:"stage"`
+	CEL         string `json:"cel"`
+	Description string `json:"description"`
 }
 
 // Roles selects the role catalog and groups its roles.
@@ -143,5 +154,37 @@ func (doc *Document) validate() error {
 			return fmt.Errorf("requires %q, which this server does not support", f)
 		}
 	}
+	if err := doc.validateModules(); err != nil {
+		return err
+	}
 	return doc.Player.validate()
+}
+
+// minorWithModules is the first schema minor that has the `team` section.
+const minorWithModules = 1
+
+// validateModules checks the team modules: the document must be schema 1.1 or
+// later, list expr.cel/1 in `requires`, use each id once, and every expression
+// must compile under the pinned engine.
+func (doc *Document) validateModules() error {
+	if len(doc.Team) == 0 {
+		return nil
+	}
+	if minor, _ := strconv.Atoi(strings.TrimPrefix(doc.Schema, "openfanta.settings/1.")); minor < minorWithModules {
+		return fmt.Errorf("team modules need schema openfanta.settings/1.%d or later, not %s", minorWithModules, doc.Schema)
+	}
+	if !slices.Contains(doc.Requires, ExprModule) {
+		return fmt.Errorf("team modules of type %s need %q in requires", ExprModule, ExprModule)
+	}
+	seen := map[string]bool{}
+	for i, m := range doc.Team {
+		if seen[m.ID] {
+			return fmt.Errorf("team[%d]: duplicate id %q", i, m.ID)
+		}
+		seen[m.ID] = true
+		if _, err := CompileExpr(doc.Engine, m.CEL); err != nil {
+			return fmt.Errorf("team[%d] %q: %w", i, m.ID, err)
+		}
+	}
+	return nil
 }

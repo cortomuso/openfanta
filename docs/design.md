@@ -128,7 +128,7 @@ graceful shutdown: `serve` in `cmd/openfanta/main.go`. Upstream retries, backoff
 
 Research behind this section: [league settings research](research/league-settings/report.md).
 
-**Built (#3):** the document schema and validation, canonical JSON and its hash, the structured diff, the Classic default, and the hash-chained `settings_versions` history with the closed-matchday check. See [League settings](settings.md) for where each lives. The rest of this section describes what is still to build: the scoring stages beyond 1, CEL, recompute and the member-visible diffs.
+**Built (#3):** the document schema and validation, canonical JSON and its hash, the structured diff, the Classic default, the hash-chained `settings_versions` history with the closed-matchday check, and the `expr.cel/1` module. See [League settings](settings.md) for where each lives. The rest of this section describes what is still to build: the scoring stages beyond 1, recompute and the member-visible diffs.
 
 **Finding:** fantacalcio rules vary widely but shallowly. Almost every rule is one of a few shapes with parameters: per-event values with per-role overrides, band tables (modificatore difesa, captain), goal-threshold lists (fasce gol), zero-sum duels (modificatore centrocampo), score corrections, ordered tie-breakers. Substitution logic (Classic modes, Mantra Basic/Easy/Master) is algorithmic: it lives in engine code and leagues select it by name.
 
@@ -150,7 +150,7 @@ Roster and market rules (quotas, budget, auction type) only validate actions; th
 - `engine` versions the semantics (tie-breaks, substitution algorithms, the expression environment) and is pinned per settings version, so an engine bug fix never silently changes old results. Adopting a new engine is an explicit, logged settings change. Today `settings.Engines` lists the one engine this build runs.
 - `requires` lists the features a document uses; a server that lacks one rejects the document instead of misreading it (`settings.Features`).
 - Unknown keys inside scoring modules are rejected. Client UI data goes in `meta` / `x-*`, which the engine ignores and preserves verbatim. The server stores the canonical submitted JSON, not a re-marshalled struct.
-- A **CEL** expression module (`expr.cel/1`, in v1) is the escape hatch for custom rules: integer-only results, type-checked at submission, cost-limited, in a frozen environment pinned by `engine`. A document that uses it lists it in `requires`.
+- A **CEL** expression module (`expr.cel/1`, in v1) is the escape hatch for custom rules: integer-only results, type-checked at submission, cost-limited, in a frozen environment pinned by `engine`. A document that uses it lists it in `requires`. Built: `internal/settings/expr.go`. The environment only declares `lineup` so far; the stages that fill it with real data are still to build.
 
 **Determinism rules:** all values are integer hundredths; band checks compare sums (`sum ≥ from × n`) and never divide; bands use ascending lower bounds only; every "best N" selection names a tie-break; voto and fantavoto rounding (mode and step) is an explicit league setting.
 
@@ -173,4 +173,5 @@ A full example document (a Classic league, and how Mantra fits the same structur
 - **2026-10-27: snapshots copy** ratings, events, line-ups and the settings version rather than referencing provider data (#1).
 - **2026-10-27: tamper evidence** is the settings hash chain for v1; signed exports and Merkle logs are deferred (#1).
 - **2026-10-27: identity:** OIDC with Google, Apple and operator-configured issuers; no email magic links (#1).
+- **2026-10-28: `expr.cel/1` pins cel-go v0.33.1** and a frozen environment named by `engine` 2026.10. Its limits (`MaxExprSource`, `MaxExprNodes`, `MaxEstimatedCost`, `MaxRuntimeCost`) are part of the engine semantics. Golden results in `internal/settings/testdata/cel/` must be rerun on every cel-go upgrade (#3).
 - **2026-10-28: settings v1 replaces the interim rule sets (#3).** Runs are keyed by the sha256 of the settings that scored them, not by a rule set id and version, and the `/v1/rulesets` endpoints are gone. Ingest scores under the Classic default until per-league scoring (stage 1) exists, so a changed default adds a run under a new hash instead of superseding the old one. `matchdays.closed_at` is a plain column for now; automatic closing comes with the league features.

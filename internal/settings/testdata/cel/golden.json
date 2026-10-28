@@ -1,0 +1,98 @@
+{
+  "engine": "2026.10",
+  "comment": "Golden results of the expr.cel/1 environment. Rerun on every cel-go upgrade: a change here means results of existing documents would change, so it needs a new engine version instead of an edit.",
+  "lineup": {
+    "starters": [
+      {
+        "voto_puro": 600,
+        "minutes": 90
+      },
+      {
+        "voto_puro": 650,
+        "minutes": 90
+      },
+      {
+        "voto_puro": 550,
+        "minutes": 70
+      }
+    ],
+    "bench": [
+      {
+        "voto_puro": 500,
+        "minutes": 20
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "constant",
+      "cel": "7",
+      "want": 7
+    },
+    {
+      "name": "negative constant",
+      "cel": "-250",
+      "want": -250
+    },
+    {
+      "name": "integer division truncates",
+      "cel": "7 / 2",
+      "want": 3
+    },
+    {
+      "name": "negative division truncates toward zero",
+      "cel": "-7 / 2",
+      "want": -3
+    },
+    {
+      "name": "negative modulo",
+      "cel": "-7 % 3",
+      "want": -1
+    },
+    {
+      "name": "all starters at least 5.5",
+      "cel": "lineup.starters.all(p, p.voto_puro >= 550) ? 200 : 0",
+      "want": 200
+    },
+    {
+      "name": "all starters at least 6",
+      "cel": "lineup.starters.all(p, p.voto_puro >= 600) ? 200 : 0",
+      "want": 0
+    },
+    {
+      "name": "count of starters over 6",
+      "cel": "lineup.starters.filter(p, p.voto_puro > 600).size()",
+      "want": 1
+    },
+    {
+      "name": "exists",
+      "cel": "lineup.bench.exists(p, p.minutes < 30) ? 100 : -100",
+      "want": 100
+    },
+    {
+      "name": "missing map key is a rule error",
+      "cel": "lineup.starters[0].nope",
+      "wantRuleError": "cel.runtime_error"
+    },
+    {
+      "name": "missing group is a rule error",
+      "cel": "lineup.reserves.size()",
+      "wantRuleError": "cel.runtime_error"
+    },
+    {
+      "name": "index out of range is a rule error",
+      "cel": "lineup.starters[9].voto_puro",
+      "wantRuleError": "cel.runtime_error"
+    },
+    {
+      "name": "division by zero is a rule error",
+      "cel": "lineup.bench[0].minutes / (lineup.bench[0].minutes - 20)",
+      "wantRuleError": "cel.runtime_error"
+    },
+    {
+      "name": "overflow is a rule error",
+      "cel": "9223372036854775807 + lineup.bench[0].minutes",
+      "wantRuleError": "cel.runtime_error"
+    }
+  ]
+}

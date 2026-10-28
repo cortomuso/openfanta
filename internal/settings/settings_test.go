@@ -101,7 +101,7 @@ func TestParseRejects(t *testing.T) {
 		}},
 		{"unsupported engine", func(s string) string { return strings.Replace(s, `"2026.10"`, `"2031.01"`, 1) }},
 		{"schema major 2", func(s string) string { return strings.Replace(s, `settings/1.0`, `settings/2.0`, 1) }},
-		{"unsupported requires", func(s string) string { return strings.Replace(s, `["scoring.penalty_mode"]`, `["expr.cel/1"]`, 1) }},
+		{"unsupported requires", func(s string) string { return strings.Replace(s, `["scoring.penalty_mode"]`, `["scoring.nope"]`, 1) }},
 		{"mode on wrong event", func(s string) string {
 			return strings.Replace(s, `"goal": 300`, `"goal": {"value": 300, "mode": "add_to_goal"}`, 1)
 		}},
