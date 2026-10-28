@@ -1,0 +1,29 @@
+{
+  "schema": "openfanta.settings/1.0",
+  "engine": "2026.10",
+  "requires": ["scoring.penalty_mode"],
+  "meta": { "name": "Classic" },
+  "game": "classic",
+  "roles": { "catalog": "classic", "groups": { "GK": ["P"], "OUT": ["D", "C", "A"] } },
+  "player": {
+    "events": {
+      "goal": 300,
+      "penalty_goal": { "mode": "same_as_goal" },
+      "assist.open_play": 100,
+      "assist.set_piece": 100,
+      "yellow": -50,
+      "red": -100,
+      "own_goal": -200,
+      "goal_conceded": { "by_role": { "P": -100 } },
+      "penalty_saved": 300,
+      "penalty_missed": -300,
+      "clean_sheet": { "by_role": { "P": 100 }, "min_minutes": null }
+    },
+    "cards": { "red_replaces_yellow": true },
+    "senza_voto": {
+      "min_minutes": 15,
+      "with_red": { "fixed": 400 },
+      "with_other_events": { "base": 600, "events": ["goal", "penalty_goal", "penalty_saved"] }
+    }
+  }
+}

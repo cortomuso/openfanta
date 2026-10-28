@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openfanta.org/schemas/settings/v1.json",
+  "title": "OpenFanta league settings, schema 1.x",
+  "type": "object",
+  "required": ["schema", "engine", "game", "player"],
+  "properties": {
+    "schema": { "type": "string", "pattern": "^openfanta\\.settings/1\\.[0-9]+$" },
+    "engine": { "type": "string", "pattern": "^[0-9]{4}\\.[0-9]{2}$" },
+    "requires": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "meta": { "type": "object" },
+    "game": { "enum": ["classic"] },
+    "roles": {
+      "type": "object",
+      "properties": {
+        "catalog": { "enum": ["classic"] },
+        "groups": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/role" },
+            "uniqueItems": true
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "player": {
+      "type": "object",
+      "required": ["events"],
+      "properties": {
+        "events": {
+          "type": "object",
+          "properties": {
+            "goal": { "$ref": "#/$defs/event" },
+            "penalty_goal": { "$ref": "#/$defs/event" },
+            "assist.open_play": { "$ref": "#/$defs/event" },
+            "assist.set_piece": { "$ref": "#/$defs/event" },
+            "assist.contribution": { "$ref": "#/$defs/event" },
+            "yellow": { "$ref": "#/$defs/event" },
+            "red": { "$ref": "#/$defs/event" },
+            "own_goal": { "$ref": "#/$defs/event" },
+            "goal_conceded": { "$ref": "#/$defs/event" },
+            "penalty_saved": { "$ref": "#/$defs/event" },
+            "penalty_missed": { "$ref": "#/$defs/event" },
+            "clean_sheet": { "$ref": "#/$defs/event" },
+            "decisive_goal.win": { "$ref": "#/$defs/event" },
+            "decisive_goal.draw": { "$ref": "#/$defs/event" }
+          },
+          "additionalProperties": false
+        },
+        "cards": {
+          "type": "object",
+          "properties": { "red_replaces_yellow": { "type": "boolean" } },
+          "additionalProperties": false
+        },
+        "senza_voto": {
+          "type": "object",
+          "properties": {
+            "min_minutes": { "type": ["integer", "null"], "minimum": 0, "maximum": 130 },
+            "with_red": {
+              "type": "object",
+              "required": ["fixed"],
+              "properties": { "fixed": { "$ref": "#/$defs/voto" } },
+              "additionalProperties": false
+            },
+            "with_other_events": {
+              "type": "object",
+              "required": ["base", "events"],
+              "properties": {
+                "base": { "$ref": "#/$defs/voto" },
+                "events": {
+                  "type": "array",
+                  "items": { "enum": ["goal", "penalty_goal", "penalty_saved", "assist.open_play", "assist.set_piece", "yellow", "own_goal", "penalty_missed"] },
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "patternProperties": { "^x-": {} },
+  "additionalProperties": false,
+  "$defs": {
+    "role": { "enum": ["P", "D", "C", "A"] },
+    "points": { "type": "integer", "minimum": -10000, "maximum": 10000 },
+    "voto": { "type": "integer", "minimum": 0, "maximum": 1000 },
+    "event": {
+      "oneOf": [
+        { "$ref": "#/$defs/points" },
+        {
+          "type": "object",
+          "properties": {
+            "value": { "$ref": "#/$defs/points" },
+            "by_role": {
+              "type": "object",
+              "propertyNames": { "$ref": "#/$defs/role" },
+              "additionalProperties": { "$ref": "#/$defs/points" }
+            },
+            "min_minutes": { "type": ["integer", "null"], "minimum": 0, "maximum": 130 },
+            "mode": { "enum": ["same_as_goal", "replace_goal", "add_to_goal"] }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}
