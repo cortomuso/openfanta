@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,7 +12,7 @@ import (
 
 	d "github.com/openfanta/openfanta/internal/domain"
 	"github.com/openfanta/openfanta/internal/engine"
-	"github.com/openfanta/openfanta/internal/rules"
+	"github.com/openfanta/openfanta/internal/settings"
 	"github.com/openfanta/openfanta/internal/store"
 	"github.com/openfanta/openfanta/internal/store/db"
 	"github.com/openfanta/openfanta/internal/store/storetest"
@@ -63,36 +64,6 @@ func TestResolveIsStable(t *testing.T) {
 	}
 	if a.Version() != 7 {
 		t.Errorf("want UUIDv7, got v%d", a.Version())
-	}
-}
-
-func classic(t *testing.T) *rules.RuleSet {
-	t.Helper()
-	reg, err := rules.LoadBuiltin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	rs, _ := reg.Get("classic", "1.0.0")
-	return rs
-}
-
-func TestRuleSetImmutability(t *testing.T) {
-	s, _ := storetest.New(t)
-	rs := classic(t)
-	if err := s.SyncRuleSets(ctx, []*rules.RuleSet{rs}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SyncRuleSets(ctx, []*rules.RuleSet{rs}); err != nil {
-		t.Fatalf("re-sync of identical rule set: %v", err)
-	}
-	changed := *rs
-	changed.Scores.Goal = 350
-	if err := s.SyncRuleSets(ctx, []*rules.RuleSet{&changed}); !errors.Is(err, store.ErrRuleSetChanged) {
-		t.Fatalf("changed rule set: err = %v", err)
-	}
-	changed.Version = "1.0.1"
-	if err := s.SyncRuleSets(ctx, []*rules.RuleSet{&changed}); err != nil {
-		t.Fatalf("bumped version: %v", err)
 	}
 }
 
@@ -153,19 +124,16 @@ func TestFactsRoundTripAndDedup(t *testing.T) {
 
 func TestRecordRunVersioning(t *testing.T) {
 	s, _ := storetest.New(t)
-	rs := classic(t)
-	if err := s.SyncRuleSets(ctx, []*rules.RuleSet{rs}); err != nil {
-		t.Fatal(err)
-	}
+	rs := settings.Classic()
 	fx, player, team := fixture(t, s)
 	facts, _ := s.SaveFacts(ctx, fx, d.MatchFacts{Length: 90}, "fake/1", []int64{})
 	voto, fanta := d.Points(600), d.Points(900)
 	scores := []engine.Score{{
 		Line: d.PlayerLine{Player: d.PlayerID(player.String()), Team: d.TeamID(team.String()), Role: d.RoleOutfield, Minutes: 90, Goals: 1},
 		Voto: &voto, Fantavoto: &fanta,
-		Breakdown: []engine.BreakdownItem{{Code: rules.Goal, Count: 1, Points: 300}},
+		Breakdown: []engine.BreakdownItem{{Code: engine.Goal, Count: 1, Points: 300}},
 	}}
-	in := store.RunInput{FixtureID: fx, FactsID: facts.ID, RuleSet: rs, VotoSource: "fake", InputHash: "h1", Reason: "ingest", Scores: scores}
+	in := store.RunInput{FixtureID: fx, FactsID: facts.ID, Settings: rs, VotoSource: "fake", InputHash: "h1", Reason: "ingest", Scores: scores}
 
 	run1, created, err := s.RecordRun(ctx, in)
 	if err != nil || !created {
@@ -192,13 +160,10 @@ func TestRecordRunVersioning(t *testing.T) {
 
 func TestRecordRunConcurrentSameInput(t *testing.T) {
 	s, _ := storetest.New(t)
-	rs := classic(t)
-	if err := s.SyncRuleSets(ctx, []*rules.RuleSet{rs}); err != nil {
-		t.Fatal(err)
-	}
+	rs := settings.Classic()
 	fx, _, _ := fixture(t, s)
 	facts, _ := s.SaveFacts(ctx, fx, d.MatchFacts{Length: 90}, "fake/1", []int64{})
-	in := store.RunInput{FixtureID: fx, FactsID: facts.ID, RuleSet: rs, VotoSource: "fake", InputHash: "same", Reason: "ingest"}
+	in := store.RunInput{FixtureID: fx, FactsID: facts.ID, Settings: rs, VotoSource: "fake", InputHash: "same", Reason: "ingest"}
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -224,16 +189,45 @@ func TestRecordRunConcurrentSameInput(t *testing.T) {
 
 func TestRecordRunRejectsNonUUIDPlayers(t *testing.T) {
 	s, _ := storetest.New(t)
-	rs := classic(t)
-	_ = s.SyncRuleSets(ctx, []*rules.RuleSet{rs})
+	rs := settings.Classic()
 	fx, _, team := fixture(t, s)
 	facts, _ := s.SaveFacts(ctx, fx, d.MatchFacts{Length: 90}, "fake/1", []int64{})
-	in := store.RunInput{FixtureID: fx, FactsID: facts.ID, RuleSet: rs, VotoSource: "fake", InputHash: "x",
+	in := store.RunInput{FixtureID: fx, FactsID: facts.ID, Settings: rs, VotoSource: "fake", InputHash: "x",
 		Scores: []engine.Score{{Line: d.PlayerLine{Player: "not-a-uuid", Team: d.TeamID(team.String())}}}}
 	if _, _, err := s.RecordRun(ctx, in); err == nil {
 		t.Fatal("expected an error for a non-UUID player")
 	}
 	if runs, _ := s.Queries().FixtureRuns(ctx, fx); len(runs) != 0 {
 		t.Fatal("failed run must roll back entirely")
+	}
+}
+
+func TestRunsAreKeptPerSettingsHash(t *testing.T) {
+	s, _ := storetest.New(t)
+	fx, _, _ := fixture(t, s)
+	facts, _ := s.SaveFacts(ctx, fx, d.MatchFacts{Length: 90}, "fake/1", []int64{})
+	classic := settings.Classic()
+	other, err := settings.Parse([]byte(strings.Replace(string(classic.Canonical), `"goal":300`, `"goal":350`, 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runs []uuid.UUID
+	for _, st := range []*settings.Settings{classic, other} {
+		run, created, err := s.RecordRun(ctx, store.RunInput{
+			FixtureID: fx, FactsID: facts.ID, Settings: st, VotoSource: "fake", InputHash: "same", Reason: "ingest",
+		})
+		if err != nil || !created {
+			t.Fatalf("%s: created=%v %v", st.SHA256, created, err)
+		}
+		runs = append(runs, run)
+	}
+	rows, err := s.Queries().FixtureRuns(ctx, fx)
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("runs = %d, %v", len(rows), err)
+	}
+	for i, r := range rows {
+		if !r.IsCurrent || r.SettingsSha256 == "" || r.ID != runs[i] || r.SupersedesRunID != nil {
+			t.Errorf("run %d: %+v", i, r)
+		}
 	}
 }

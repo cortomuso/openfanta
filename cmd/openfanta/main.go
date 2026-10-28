@@ -24,7 +24,7 @@ import (
 	"github.com/openfanta/openfanta/internal/ingest"
 	"github.com/openfanta/openfanta/internal/provider/httpx"
 	"github.com/openfanta/openfanta/internal/provider/sportmonks"
-	"github.com/openfanta/openfanta/internal/rules"
+	"github.com/openfanta/openfanta/internal/settings"
 	"github.com/openfanta/openfanta/internal/store"
 	"github.com/openfanta/openfanta/internal/voto"
 )
@@ -35,8 +35,8 @@ commands:
   serve       serve the read-only HTTP API
   migrate     apply database migrations
   ingest      fetch one matchday from the provider and compute fantavoti
-  recompute   recompute stored fixtures under the current rule sets
-  rulesets    list the loaded rule sets
+  recompute   recompute stored fixtures under the default settings
+  settings    print the default league settings document (canonical JSON)
 
 Configuration comes from OPENFANTA_* environment variables; see .env.example.
 `
@@ -80,14 +80,8 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return runIngest(ctx, cfg, log, rest, stdout)
 	case "recompute":
 		return runRecompute(ctx, cfg, log, rest, stdout)
-	case "rulesets":
-		reg, err := loadRules(cfg)
-		if err != nil {
-			return err
-		}
-		for _, rs := range reg.All() {
-			fmt.Fprintf(stdout, "%-24s %s  %s\n", rs.Key(), rs.Hash()[:12], rs.Name)
-		}
+	case "settings":
+		fmt.Fprintf(stdout, "%s\n", settings.Classic().Canonical)
 		return nil
 	case "-h", "--help", "help":
 		fmt.Fprint(stdout, usage)
@@ -96,21 +90,6 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		fmt.Fprint(stdout, usage)
 		return fmt.Errorf("%w: unknown command %q", errUsage, cmd)
 	}
-}
-
-func loadRules(cfg config.Config) (*rules.Registry, error) {
-	reg, err := rules.LoadBuiltin()
-	if err != nil {
-		return nil, err
-	}
-	if cfg.RulesetsDir == "" {
-		return reg, nil
-	}
-	extra, err := rules.LoadFS(os.DirFS(cfg.RulesetsDir))
-	if err != nil {
-		return nil, fmt.Errorf("rule sets in %s: %w", cfg.RulesetsDir, err)
-	}
-	return rules.Merge(reg, extra)
 }
 
 // newService wires the pipeline. The Sportmonks client is only needed for
@@ -124,10 +103,6 @@ func newService(ctx context.Context, cfg config.Config, log *slog.Logger, needPr
 			return nil, nil, err
 		}
 	}
-	reg, err := loadRules(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
 	if cfg.MigrateOnStartup {
 		if err := store.Migrate(ctx, cfg.DatabaseURL); err != nil {
 			return nil, nil, err
@@ -137,17 +112,13 @@ func newService(ctx context.Context, cfg config.Config, log *slog.Logger, needPr
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := st.SyncRuleSets(ctx, reg.All()); err != nil {
-		st.Close()
-		return nil, nil, err
-	}
 	limiter := rate.NewLimiter(rate.Every(time.Hour/time.Duration(cfg.RequestsPerHour)), 5)
 	sm := sportmonks.New(cfg.SportmonksToken, httpx.New(limiter, log))
 	if cfg.SportmonksURL != "" {
 		sm.BaseURL = cfg.SportmonksURL
 	}
 	svc := &ingest.Service{
-		Store: st, Provider: sm, Rules: reg, Voto: voto.NewProviderRating(),
+		Store: st, Provider: sm, Voto: voto.NewProviderRating(),
 		Logger: log, Now: time.Now,
 	}
 	return svc, st.Close, nil
@@ -237,18 +208,11 @@ func runServe(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 			return err
 		}
 	}
-	reg, err := loadRules(cfg)
-	if err != nil {
-		return err
-	}
 	st, err := store.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
 	}
 	defer st.Close()
-	if err := st.SyncRuleSets(ctx, reg.All()); err != nil {
-		return err
-	}
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)
 	if err != nil {
 		return err

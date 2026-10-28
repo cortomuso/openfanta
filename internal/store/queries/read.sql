@@ -1,5 +1,5 @@
 -- name: FixtureRuns :many
-SELECT r.id, r.rule_set_id, r.rule_set_version, r.voto_source, r.engine_version, r.input_hash,
+SELECT r.id, r.settings_sha256, r.voto_source, r.engine_version, r.input_hash,
        r.supersedes_run_id, r.reason, r.created_at,
        EXISTS (SELECT 1 FROM current_runs cr WHERE cr.run_id = r.id) AS is_current
 FROM computation_runs r
@@ -8,17 +8,17 @@ ORDER BY r.created_at, r.id;
 
 -- name: FixtureScores :many
 SELECT * FROM current_scores
-WHERE fixture_id = $1 AND rule_set_id = $2 AND voto_source = $3
+WHERE fixture_id = $1 AND settings_sha256 = $2 AND voto_source = $3
 ORDER BY team_name, player_name, player_id;
 
 -- name: MatchdayScores :many
 SELECT * FROM current_scores
-WHERE season_id = $1 AND matchday = $2 AND rule_set_id = $3 AND voto_source = $4
+WHERE season_id = $1 AND matchday = $2 AND settings_sha256 = $3 AND voto_source = $4
 ORDER BY kickoff, fixture_id, team_name, player_name, player_id;
 
 -- name: PlayerSeasonScores :many
 SELECT * FROM current_scores
-WHERE season_id = $1 AND player_id = $2 AND rule_set_id = $3 AND voto_source = $4
+WHERE season_id = $1 AND player_id = $2 AND settings_sha256 = $3 AND voto_source = $4
 ORDER BY matchday, kickoff;
 
 -- name: ListSeasons :many
@@ -55,12 +55,6 @@ JOIN matchdays m ON m.id = f.matchday_id
 JOIN teams h ON h.id = f.home_team_id
 JOIN teams a ON a.id = f.away_team_id
 WHERE f.id = $1;
-
--- name: ListRuleSets :many
-SELECT id, version, content_hash, body, created_at FROM rule_sets ORDER BY id, created_at;
-
--- name: GetRuleSet :one
-SELECT id, version, content_hash, body, created_at FROM rule_sets WHERE id = $1 AND version = $2;
 
 -- name: SettingsHead :one
 SELECT * FROM settings_versions WHERE league_id = $1 ORDER BY seq DESC LIMIT 1;

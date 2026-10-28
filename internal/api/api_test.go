@@ -21,7 +21,7 @@ import (
 	"github.com/openfanta/openfanta/internal/provider/httpx"
 	"github.com/openfanta/openfanta/internal/provider/sportmonks"
 	"github.com/openfanta/openfanta/internal/provider/sportmonks/smtest"
-	"github.com/openfanta/openfanta/internal/rules"
+	"github.com/openfanta/openfanta/internal/settings"
 	"github.com/openfanta/openfanta/internal/store"
 	"github.com/openfanta/openfanta/internal/store/storetest"
 	"github.com/openfanta/openfanta/internal/voto"
@@ -42,18 +42,11 @@ func setup(t *testing.T) *fixture {
 	ctx := context.Background()
 	st, _ := storetest.New(t)
 	_, srv := smtest.New(t)
-	reg, err := rules.LoadBuiltin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st.SyncRuleSets(ctx, reg.All()); err != nil {
-		t.Fatal(err)
-	}
 	hc := httpx.New(nil, nil)
 	hc.MaxRetries = 0
 	sm := sportmonks.New("token", hc)
 	sm.BaseURL = srv.URL
-	svc := &ingest.Service{Store: st, Provider: sm, Rules: reg, Voto: voto.NewProviderRating(), Logger: quiet, Now: time.Now}
+	svc := &ingest.Service{Store: st, Provider: sm, Voto: voto.NewProviderRating(), Logger: quiet, Now: time.Now}
 	if _, err := svc.IngestMatchday(ctx, "777", 1, ingest.Options{}); err != nil {
 		t.Fatal(err)
 	}
@@ -127,8 +120,8 @@ func TestBrowseAndScores(t *testing.T) {
 
 	var list api.ScoreList
 	f.get("/v1/seasons/"+seasonID+"/matchdays/1/scores", 200, &list)
-	if list.Ruleset != "classic" || list.VotoSource != "provider-rating" || len(list.Scores) != 12 {
-		t.Fatalf("matchday scores: ruleset=%s source=%s n=%d", list.Ruleset, list.VotoSource, len(list.Scores))
+	if list.SettingsSha256 != settings.Classic().SHA256 || list.VotoSource != "provider-rating" || len(list.Scores) != 12 {
+		t.Fatalf("matchday scores: settings=%s source=%s n=%d", list.SettingsSha256, list.VotoSource, len(list.Scores))
 	}
 	by := map[string]api.Score{}
 	for _, s := range list.Scores {
@@ -141,7 +134,7 @@ func TestBrowseAndScores(t *testing.T) {
 	if len(striker.Breakdown) != 2 || striker.Breakdown[0] != (api.BreakdownItem{Code: "goal", Count: 1, Points: "3.00"}) {
 		t.Errorf("Home Striker breakdown = %+v", striker.Breakdown)
 	}
-	if striker.Run.RulesetVersion != "1.0.0" || striker.Matchday != 1 || striker.FixtureId != fixtureID {
+	if striker.Run.SettingsSha256 != settings.Classic().SHA256 || striker.Matchday != 1 || striker.FixtureId != fixtureID {
 		t.Errorf("Home Striker run/fixture = %+v", striker)
 	}
 	if sv := by["Away Reserve Keeper"]; !sv.SenzaVoto || sv.Voto != nil || sv.Fantavoto != nil || len(sv.Breakdown) != 0 {
@@ -190,28 +183,35 @@ func TestBrowseAndScores(t *testing.T) {
 		t.Errorf("runs = %+v", runs)
 	}
 
-	// Other rule set families or voto sources simply have no scores yet.
+	// Other voto sources simply have no scores yet.
 	var empty api.ScoreList
-	f.get("/v1/seasons/"+seasonID+"/matchdays/1/scores?ruleset=mantra", 200, &empty)
-	if empty.Ruleset != "mantra" || len(empty.Scores) != 0 {
-		t.Errorf("unknown ruleset = %+v", empty)
+	f.get("/v1/seasons/"+seasonID+"/matchdays/1/scores?voto_source=mantra", 200, &empty)
+	if empty.VotoSource != "mantra" || len(empty.Scores) != 0 {
+		t.Errorf("unknown voto source = %+v", empty)
 	}
 }
 
-func TestRuleSets(t *testing.T) {
+func TestDefaultSettings(t *testing.T) {
 	f := setup(t)
-	var list struct{ Rulesets []api.RuleSetSummary }
-	f.get("/v1/rulesets", 200, &list)
-	if len(list.Rulesets) != 1 || list.Rulesets[0].Id != "classic" || list.Rulesets[0].Name != "Classic" || len(list.Rulesets[0].ContentHash) != 64 {
-		t.Fatalf("rulesets = %+v", list)
+	var got api.Settings
+	f.get("/v1/settings/default", 200, &got)
+	classic := settings.Classic()
+	if got.Sha256 != classic.SHA256 {
+		t.Errorf("sha256 = %s, want %s", got.Sha256, classic.SHA256)
 	}
-	var rs api.RuleSet
-	f.get("/v1/rulesets/classic/versions/1.0.0", 200, &rs)
-	scores := rs.Body["scores"].(map[string]any)
-	if scores["goal"] != float64(300) {
-		t.Errorf("classic goal = %v", scores["goal"])
+	// The body must hash back to the advertised sha256 once canonicalized.
+	raw, err := json.Marshal(got.Body)
+	if err != nil {
+		t.Fatal(err)
 	}
-	f.get("/v1/rulesets/classic/versions/9.9.9", 404, nil)
+	canon, err := settings.Canonicalize(raw)
+	if err != nil || string(canon) != string(classic.Canonical) {
+		t.Errorf("body does not round-trip to the canonical document: %v", err)
+	}
+	events := got.Body["player"].(map[string]any)["events"].(map[string]any)
+	if events["goal"] != float64(300) {
+		t.Errorf("classic goal = %v", events["goal"])
+	}
 }
 
 func TestErrors(t *testing.T) {

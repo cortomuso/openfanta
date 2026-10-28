@@ -13,7 +13,7 @@ import (
 )
 
 const fixtureRuns = `-- name: FixtureRuns :many
-SELECT r.id, r.rule_set_id, r.rule_set_version, r.voto_source, r.engine_version, r.input_hash,
+SELECT r.id, r.settings_sha256, r.voto_source, r.engine_version, r.input_hash,
        r.supersedes_run_id, r.reason, r.created_at,
        EXISTS (SELECT 1 FROM current_runs cr WHERE cr.run_id = r.id) AS is_current
 FROM computation_runs r
@@ -23,8 +23,7 @@ ORDER BY r.created_at, r.id
 
 type FixtureRunsRow struct {
 	ID              uuid.UUID
-	RuleSetID       string
-	RuleSetVersion  string
+	SettingsSha256  string
 	VotoSource      string
 	EngineVersion   string
 	InputHash       string
@@ -45,8 +44,7 @@ func (q *Queries) FixtureRuns(ctx context.Context, fixtureID uuid.UUID) ([]Fixtu
 		var i FixtureRunsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.RuleSetID,
-			&i.RuleSetVersion,
+			&i.SettingsSha256,
 			&i.VotoSource,
 			&i.EngineVersion,
 			&i.InputHash,
@@ -66,19 +64,19 @@ func (q *Queries) FixtureRuns(ctx context.Context, fixtureID uuid.UUID) ([]Fixtu
 }
 
 const fixtureScores = `-- name: FixtureScores :many
-SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, run_id, rule_set_id, rule_set_version, voto_source, computed_at FROM current_scores
-WHERE fixture_id = $1 AND rule_set_id = $2 AND voto_source = $3
+SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, run_id, settings_sha256, voto_source, computed_at FROM current_scores
+WHERE fixture_id = $1 AND settings_sha256 = $2 AND voto_source = $3
 ORDER BY team_name, player_name, player_id
 `
 
 type FixtureScoresParams struct {
-	FixtureID  uuid.UUID
-	RuleSetID  string
-	VotoSource string
+	FixtureID      uuid.UUID
+	SettingsSha256 string
+	VotoSource     string
 }
 
 func (q *Queries) FixtureScores(ctx context.Context, arg FixtureScoresParams) ([]CurrentScore, error) {
-	rows, err := q.db.Query(ctx, fixtureScores, arg.FixtureID, arg.RuleSetID, arg.VotoSource)
+	rows, err := q.db.Query(ctx, fixtureScores, arg.FixtureID, arg.SettingsSha256, arg.VotoSource)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +110,7 @@ func (q *Queries) FixtureScores(ctx context.Context, arg FixtureScoresParams) ([
 			&i.SentOff,
 			&i.GoalsConceded,
 			&i.RunID,
-			&i.RuleSetID,
-			&i.RuleSetVersion,
+			&i.SettingsSha256,
 			&i.VotoSource,
 			&i.ComputedAt,
 		); err != nil {
@@ -174,28 +171,6 @@ func (q *Queries) GetPlayer(ctx context.Context, id uuid.UUID) (Player, error) {
 	row := q.db.QueryRow(ctx, getPlayer, id)
 	var i Player
 	err := row.Scan(&i.ID, &i.Name)
-	return i, err
-}
-
-const getRuleSet = `-- name: GetRuleSet :one
-SELECT id, version, content_hash, body, created_at FROM rule_sets WHERE id = $1 AND version = $2
-`
-
-type GetRuleSetParams struct {
-	ID      string
-	Version string
-}
-
-func (q *Queries) GetRuleSet(ctx context.Context, arg GetRuleSetParams) (RuleSet, error) {
-	row := q.db.QueryRow(ctx, getRuleSet, arg.ID, arg.Version)
-	var i RuleSet
-	err := row.Scan(
-		&i.ID,
-		&i.Version,
-		&i.ContentHash,
-		&i.Body,
-		&i.CreatedAt,
-	)
 	return i, err
 }
 
@@ -271,36 +246,6 @@ func (q *Queries) HasClosedMatchdayFrom(ctx context.Context, arg HasClosedMatchd
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
-}
-
-const listRuleSets = `-- name: ListRuleSets :many
-SELECT id, version, content_hash, body, created_at FROM rule_sets ORDER BY id, created_at
-`
-
-func (q *Queries) ListRuleSets(ctx context.Context) ([]RuleSet, error) {
-	rows, err := q.db.Query(ctx, listRuleSets)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RuleSet
-	for rows.Next() {
-		var i RuleSet
-		if err := rows.Scan(
-			&i.ID,
-			&i.Version,
-			&i.ContentHash,
-			&i.Body,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listSeasons = `-- name: ListSeasons :many
@@ -396,23 +341,23 @@ func (q *Queries) MatchdayExists(ctx context.Context, arg MatchdayExistsParams) 
 }
 
 const matchdayScores = `-- name: MatchdayScores :many
-SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, run_id, rule_set_id, rule_set_version, voto_source, computed_at FROM current_scores
-WHERE season_id = $1 AND matchday = $2 AND rule_set_id = $3 AND voto_source = $4
+SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, run_id, settings_sha256, voto_source, computed_at FROM current_scores
+WHERE season_id = $1 AND matchday = $2 AND settings_sha256 = $3 AND voto_source = $4
 ORDER BY kickoff, fixture_id, team_name, player_name, player_id
 `
 
 type MatchdayScoresParams struct {
-	SeasonID   uuid.UUID
-	Matchday   int32
-	RuleSetID  string
-	VotoSource string
+	SeasonID       uuid.UUID
+	Matchday       int32
+	SettingsSha256 string
+	VotoSource     string
 }
 
 func (q *Queries) MatchdayScores(ctx context.Context, arg MatchdayScoresParams) ([]CurrentScore, error) {
 	rows, err := q.db.Query(ctx, matchdayScores,
 		arg.SeasonID,
 		arg.Matchday,
-		arg.RuleSetID,
+		arg.SettingsSha256,
 		arg.VotoSource,
 	)
 	if err != nil {
@@ -448,8 +393,7 @@ func (q *Queries) MatchdayScores(ctx context.Context, arg MatchdayScoresParams) 
 			&i.SentOff,
 			&i.GoalsConceded,
 			&i.RunID,
-			&i.RuleSetID,
-			&i.RuleSetVersion,
+			&i.SettingsSha256,
 			&i.VotoSource,
 			&i.ComputedAt,
 		); err != nil {
@@ -464,23 +408,23 @@ func (q *Queries) MatchdayScores(ctx context.Context, arg MatchdayScoresParams) 
 }
 
 const playerSeasonScores = `-- name: PlayerSeasonScores :many
-SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, run_id, rule_set_id, rule_set_version, voto_source, computed_at FROM current_scores
-WHERE season_id = $1 AND player_id = $2 AND rule_set_id = $3 AND voto_source = $4
+SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, run_id, settings_sha256, voto_source, computed_at FROM current_scores
+WHERE season_id = $1 AND player_id = $2 AND settings_sha256 = $3 AND voto_source = $4
 ORDER BY matchday, kickoff
 `
 
 type PlayerSeasonScoresParams struct {
-	SeasonID   uuid.UUID
-	PlayerID   uuid.UUID
-	RuleSetID  string
-	VotoSource string
+	SeasonID       uuid.UUID
+	PlayerID       uuid.UUID
+	SettingsSha256 string
+	VotoSource     string
 }
 
 func (q *Queries) PlayerSeasonScores(ctx context.Context, arg PlayerSeasonScoresParams) ([]CurrentScore, error) {
 	rows, err := q.db.Query(ctx, playerSeasonScores,
 		arg.SeasonID,
 		arg.PlayerID,
-		arg.RuleSetID,
+		arg.SettingsSha256,
 		arg.VotoSource,
 	)
 	if err != nil {
@@ -516,8 +460,7 @@ func (q *Queries) PlayerSeasonScores(ctx context.Context, arg PlayerSeasonScores
 			&i.SentOff,
 			&i.GoalsConceded,
 			&i.RunID,
-			&i.RuleSetID,
-			&i.RuleSetVersion,
+			&i.SettingsSha256,
 			&i.VotoSource,
 			&i.ComputedAt,
 		); err != nil {

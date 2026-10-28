@@ -34,13 +34,13 @@ func (q *Queries) CloseMatchday(ctx context.Context, arg CloseMatchdayParams) (i
 const currentRun = `-- name: CurrentRun :one
 SELECT r.id, r.input_hash FROM current_runs cr
 JOIN computation_runs r ON r.id = cr.run_id
-WHERE cr.fixture_id = $1 AND cr.rule_set_id = $2 AND cr.voto_source = $3
+WHERE cr.fixture_id = $1 AND cr.settings_sha256 = $2 AND cr.voto_source = $3
 `
 
 type CurrentRunParams struct {
-	FixtureID  uuid.UUID
-	RuleSetID  string
-	VotoSource string
+	FixtureID      uuid.UUID
+	SettingsSha256 string
+	VotoSource     string
 }
 
 type CurrentRunRow struct {
@@ -49,7 +49,7 @@ type CurrentRunRow struct {
 }
 
 func (q *Queries) CurrentRun(ctx context.Context, arg CurrentRunParams) (CurrentRunRow, error) {
-	row := q.db.QueryRow(ctx, currentRun, arg.FixtureID, arg.RuleSetID, arg.VotoSource)
+	row := q.db.QueryRow(ctx, currentRun, arg.FixtureID, arg.SettingsSha256, arg.VotoSource)
 	var i CurrentRunRow
 	err := row.Scan(&i.ID, &i.InputHash)
 	return i, err
@@ -131,22 +131,6 @@ func (q *Queries) GetRef(ctx context.Context, arg GetRefParams) (uuid.UUID, erro
 	var entity_id uuid.UUID
 	err := row.Scan(&entity_id)
 	return entity_id, err
-}
-
-const getRuleSetHash = `-- name: GetRuleSetHash :one
-SELECT content_hash FROM rule_sets WHERE id = $1 AND version = $2
-`
-
-type GetRuleSetHashParams struct {
-	ID      string
-	Version string
-}
-
-func (q *Queries) GetRuleSetHash(ctx context.Context, arg GetRuleSetHashParams) (string, error) {
-	row := q.db.QueryRow(ctx, getRuleSetHash, arg.ID, arg.Version)
-	var content_hash string
-	err := row.Scan(&content_hash)
-	return content_hash, err
 }
 
 const insertFixtureFacts = `-- name: InsertFixtureFacts :one
@@ -284,43 +268,18 @@ func (q *Queries) InsertRef(ctx context.Context, arg InsertRefParams) (uuid.UUID
 	return entity_id, err
 }
 
-const insertRuleSet = `-- name: InsertRuleSet :exec
-INSERT INTO rule_sets (id, version, content_hash, body, created_at) VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (id, version) DO NOTHING
-`
-
-type InsertRuleSetParams struct {
-	ID          string
-	Version     string
-	ContentHash string
-	Body        []byte
-	CreatedAt   time.Time
-}
-
-func (q *Queries) InsertRuleSet(ctx context.Context, arg InsertRuleSetParams) error {
-	_, err := q.db.Exec(ctx, insertRuleSet,
-		arg.ID,
-		arg.Version,
-		arg.ContentHash,
-		arg.Body,
-		arg.CreatedAt,
-	)
-	return err
-}
-
 const insertRun = `-- name: InsertRun :exec
 INSERT INTO computation_runs (
-    id, fixture_id, fixture_facts_id, rule_set_id, rule_set_version, voto_source,
+    id, fixture_id, fixture_facts_id, settings_sha256, voto_source,
     engine_version, input_hash, supersedes_run_id, reason, created_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type InsertRunParams struct {
 	ID              uuid.UUID
 	FixtureID       uuid.UUID
 	FixtureFactsID  int64
-	RuleSetID       string
-	RuleSetVersion  string
+	SettingsSha256  string
 	VotoSource      string
 	EngineVersion   string
 	InputHash       string
@@ -334,8 +293,7 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 		arg.ID,
 		arg.FixtureID,
 		arg.FixtureFactsID,
-		arg.RuleSetID,
-		arg.RuleSetVersion,
+		arg.SettingsSha256,
 		arg.VotoSource,
 		arg.EngineVersion,
 		arg.InputHash,
@@ -450,7 +408,7 @@ const lockComputation = `-- name: LockComputation :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
 `
 
-// Serializes run recording per (fixture, rule set, voto source) for the transaction.
+// Serializes run recording per (fixture, settings, voto source) for the transaction.
 func (q *Queries) LockComputation(ctx context.Context, key string) error {
 	_, err := q.db.Exec(ctx, lockComputation, key)
 	return err
@@ -469,21 +427,21 @@ func (q *Queries) LockLeague(ctx context.Context, id uuid.UUID) (uuid.UUID, erro
 }
 
 const setCurrentRun = `-- name: SetCurrentRun :exec
-INSERT INTO current_runs (fixture_id, rule_set_id, voto_source, run_id) VALUES ($1, $2, $3, $4)
-ON CONFLICT (fixture_id, rule_set_id, voto_source) DO UPDATE SET run_id = EXCLUDED.run_id
+INSERT INTO current_runs (fixture_id, settings_sha256, voto_source, run_id) VALUES ($1, $2, $3, $4)
+ON CONFLICT (fixture_id, settings_sha256, voto_source) DO UPDATE SET run_id = EXCLUDED.run_id
 `
 
 type SetCurrentRunParams struct {
-	FixtureID  uuid.UUID
-	RuleSetID  string
-	VotoSource string
-	RunID      uuid.UUID
+	FixtureID      uuid.UUID
+	SettingsSha256 string
+	VotoSource     string
+	RunID          uuid.UUID
 }
 
 func (q *Queries) SetCurrentRun(ctx context.Context, arg SetCurrentRunParams) error {
 	_, err := q.db.Exec(ctx, setCurrentRun,
 		arg.FixtureID,
-		arg.RuleSetID,
+		arg.SettingsSha256,
 		arg.VotoSource,
 		arg.RunID,
 	)

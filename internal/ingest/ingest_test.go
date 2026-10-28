@@ -6,11 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,7 +15,7 @@ import (
 	"github.com/openfanta/openfanta/internal/provider/httpx"
 	"github.com/openfanta/openfanta/internal/provider/sportmonks"
 	"github.com/openfanta/openfanta/internal/provider/sportmonks/smtest"
-	"github.com/openfanta/openfanta/internal/rules"
+	"github.com/openfanta/openfanta/internal/settings"
 	"github.com/openfanta/openfanta/internal/store"
 	"github.com/openfanta/openfanta/internal/store/db"
 	"github.com/openfanta/openfanta/internal/store/storetest"
@@ -27,28 +24,16 @@ import (
 
 var ctx = context.Background()
 
-func newService(t *testing.T, st *store.Store, srv *httptest.Server, reg *rules.Registry) *Service {
+func newService(t *testing.T, st *store.Store, srv *httptest.Server, st2 *settings.Settings) *Service {
 	t.Helper()
 	hc := httpx.New(nil, nil)
 	hc.MaxRetries = 0
 	sm := sportmonks.New("token", hc)
 	sm.BaseURL = srv.URL
-	if err := st.SyncRuleSets(ctx, reg.All()); err != nil {
-		t.Fatal(err)
-	}
 	return &Service{
-		Store: st, Provider: sm, Rules: reg, Voto: voto.NewProviderRating(),
+		Store: st, Provider: sm, Settings: st2, Voto: voto.NewProviderRating(),
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: time.Now,
 	}
-}
-
-func builtin(t *testing.T) *rules.Registry {
-	t.Helper()
-	reg, err := rules.LoadBuiltin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return reg
 }
 
 type scoreView struct {
@@ -58,7 +43,12 @@ type scoreView struct {
 
 func scores(t *testing.T, st *store.Store, fixture uuid.UUID) map[string]scoreView {
 	t.Helper()
-	rows, err := st.Queries().FixtureScores(ctx, db.FixtureScoresParams{FixtureID: fixture, RuleSetID: "classic", VotoSource: "provider-rating"})
+	return scoresUnder(t, st, fixture, settings.Classic())
+}
+
+func scoresUnder(t *testing.T, st *store.Store, fixture uuid.UUID, set *settings.Settings) map[string]scoreView {
+	t.Helper()
+	rows, err := st.Queries().FixtureScores(ctx, db.FixtureScoresParams{FixtureID: fixture, SettingsSha256: set.SHA256, VotoSource: "provider-rating"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +69,7 @@ func scores(t *testing.T, st *store.Store, fixture uuid.UUID) map[string]scoreVi
 func TestIngestMatchdayEndToEnd(t *testing.T) {
 	st, _ := storetest.New(t)
 	up, srv := smtest.New(t)
-	svc := newService(t, st, srv, builtin(t))
+	svc := newService(t, st, srv, nil)
 
 	rep, err := svc.IngestMatchday(ctx, "777", 1, Options{})
 	if err != nil {
@@ -146,7 +136,7 @@ func TestIngestMatchdayEndToEnd(t *testing.T) {
 func TestCorrectedUpstreamEventCreatesAuditableRun(t *testing.T) {
 	st, _ := storetest.New(t)
 	up, srv := smtest.New(t)
-	svc := newService(t, st, srv, builtin(t))
+	svc := newService(t, st, srv, nil)
 	rep, err := svc.IngestMatchday(ctx, "777", 1, Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +193,7 @@ func TestLiveFixtureIsNotScoredUntilFinal(t *testing.T) {
 	up, srv := smtest.New(t)
 	ft := smtest.Fixture(t, "fixture_5001_ft.json")
 	up.Set("/fixtures/5001", smtest.Fixture(t, "fixture_5001_live.json"))
-	svc := newService(t, st, srv, builtin(t))
+	svc := newService(t, st, srv, nil)
 
 	rep, _ := svc.IngestMatchday(ctx, "777", 1, Options{})
 	for _, f := range rep.Fixtures {
@@ -223,7 +213,7 @@ func TestLiveFixtureIsNotScoredUntilFinal(t *testing.T) {
 func TestRecomputeWithNewRuleSetVersion(t *testing.T) {
 	st, _ := storetest.New(t)
 	_, srv := smtest.New(t)
-	svc := newService(t, st, srv, builtin(t))
+	svc := newService(t, st, srv, nil)
 	if _, err := svc.IngestMatchday(ctx, "777", 1, Options{}); err != nil {
 		t.Fatal(err)
 	}
@@ -236,27 +226,26 @@ func TestRecomputeWithNewRuleSetVersion(t *testing.T) {
 		}
 	}
 
-	// A bumped classic version with a bigger goal bonus supersedes the old run.
-	src, _ := os.ReadFile(filepath.Join("..", "..", "rulesets", "classic.yaml"))
-	bumped := strings.Replace(strings.Replace(string(src), "version: 1.0.0", "version: 1.1.0", 1), "goal: 300", "goal: 350", 1)
-	extra, err := rules.LoadFS(fstest.MapFS{"classic-1.1.0.yaml": {Data: []byte(bumped)}})
+	// Scoring under different settings (a bigger goal bonus) adds a run under
+	// the new hash and leaves the Classic run current.
+	bumped, err := settings.Parse([]byte(strings.Replace(string(settings.Classic().Canonical), `"goal":300`, `"goal":350`, 1)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg, err := rules.Merge(builtin(t), extra)
-	if err != nil {
-		t.Fatal(err)
-	}
-	svc = newService(t, st, srv, reg)
-	rep, err := svc.Recompute(ctx, RecomputeOptions{Reason: "classic 1.1.0"})
+	svc = newService(t, st, srv, bumped)
+	rep, err := svc.Recompute(ctx, RecomputeOptions{Reason: "goal 3.5"})
 	if err != nil || rep.Fixtures[0].RunsCreated != 1 {
 		t.Fatalf("recompute = %+v, %v", rep, err)
 	}
-	if got := scores(t, st, rep.Fixtures[0].ID)["Home Striker"]; got.fanta != "12.60" {
-		t.Errorf("Home Striker under classic 1.1.0 = %+v", got)
+	id := rep.Fixtures[0].ID
+	if got := scoresUnder(t, st, id, bumped)["Home Striker"]; got.fanta != "12.60" {
+		t.Errorf("Home Striker under bumped settings = %+v", got)
 	}
-	runs, _ := st.Queries().FixtureRuns(ctx, rep.Fixtures[0].ID)
-	if len(runs) != 2 || runs[1].RuleSetVersion != "1.1.0" || runs[1].Reason != "classic 1.1.0" {
+	if got := scores(t, st, id)["Home Striker"]; got.fanta == "12.60" {
+		t.Errorf("Classic run changed: %+v", got)
+	}
+	runs, _ := st.Queries().FixtureRuns(ctx, id)
+	if len(runs) != 2 || runs[1].SettingsSha256 != bumped.SHA256 || runs[1].Reason != "goal 3.5" || !runs[0].IsCurrent || !runs[1].IsCurrent {
 		t.Errorf("runs = %+v", runs)
 	}
 }
@@ -264,7 +253,7 @@ func TestRecomputeWithNewRuleSetVersion(t *testing.T) {
 func TestUnknownMatchday(t *testing.T) {
 	st, _ := storetest.New(t)
 	_, srv := smtest.New(t)
-	svc := newService(t, st, srv, builtin(t))
+	svc := newService(t, st, srv, nil)
 	if _, err := svc.IngestMatchday(ctx, "777", 38, Options{}); err == nil {
 		t.Fatal("expected an error for a matchday without fixtures")
 	}

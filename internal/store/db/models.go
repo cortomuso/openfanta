@@ -20,21 +20,20 @@ type ComputationRun struct {
 	ID              uuid.UUID
 	FixtureID       uuid.UUID
 	FixtureFactsID  int64
-	RuleSetID       string
-	RuleSetVersion  string
 	VotoSource      string
 	EngineVersion   string
 	InputHash       string
 	SupersedesRunID *uuid.UUID
 	Reason          string
 	CreatedAt       time.Time
+	SettingsSha256  string
 }
 
 type CurrentRun struct {
-	FixtureID  uuid.UUID
-	RuleSetID  string
-	VotoSource string
-	RunID      uuid.UUID
+	FixtureID      uuid.UUID
+	VotoSource     string
+	RunID          uuid.UUID
+	SettingsSha256 string
 }
 
 type CurrentScore struct {
@@ -63,8 +62,7 @@ type CurrentScore struct {
 	SentOff         bool
 	GoalsConceded   int32
 	RunID           uuid.UUID
-	RuleSetID       string
-	RuleSetVersion  string
+	SettingsSha256  string
 	VotoSource      string
 	ComputedAt      time.Time
 }
@@ -145,14 +143,6 @@ type RawPayload struct {
 	Body       []byte
 	FetchedAt  time.Time
 	LastSeenAt time.Time
-}
-
-type RuleSet struct {
-	ID          string
-	Version     string
-	ContentHash string
-	Body        []byte
-	CreatedAt   time.Time
 }
 
 type Season struct {
