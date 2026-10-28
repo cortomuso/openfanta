@@ -61,3 +61,18 @@ SELECT id, version, content_hash, body, created_at FROM rule_sets ORDER BY id, c
 
 -- name: GetRuleSet :one
 SELECT id, version, content_hash, body, created_at FROM rule_sets WHERE id = $1 AND version = $2;
+
+-- name: SettingsHead :one
+SELECT * FROM settings_versions WHERE league_id = $1 ORDER BY seq DESC LIMIT 1;
+
+-- name: ListSettingsVersions :many
+SELECT * FROM settings_versions WHERE league_id = $1 ORDER BY seq;
+
+-- name: GetSettingsVersion :one
+SELECT * FROM settings_versions WHERE league_id = $1 AND seq = $2;
+
+-- name: HasClosedMatchdayFrom :one
+-- True when matchday $2 or any later one of the season is already closed.
+SELECT EXISTS (
+    SELECT 1 FROM matchdays WHERE season_id = $1 AND number >= $2 AND closed_at IS NOT NULL
+);
