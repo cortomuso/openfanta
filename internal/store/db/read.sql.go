@@ -226,6 +226,53 @@ func (q *Queries) GetSeason(ctx context.Context, id uuid.UUID) (GetSeasonRow, er
 	return i, err
 }
 
+const getSettingsVersion = `-- name: GetSettingsVersion :one
+SELECT league_id, seq, canonical_json, sha256, prev_sha256, schema, engine, effective_from_matchday, author, reason, created_at FROM settings_versions WHERE league_id = $1 AND seq = $2
+`
+
+type GetSettingsVersionParams struct {
+	LeagueID uuid.UUID
+	Seq      int32
+}
+
+func (q *Queries) GetSettingsVersion(ctx context.Context, arg GetSettingsVersionParams) (SettingsVersion, error) {
+	row := q.db.QueryRow(ctx, getSettingsVersion, arg.LeagueID, arg.Seq)
+	var i SettingsVersion
+	err := row.Scan(
+		&i.LeagueID,
+		&i.Seq,
+		&i.CanonicalJson,
+		&i.Sha256,
+		&i.PrevSha256,
+		&i.Schema,
+		&i.Engine,
+		&i.EffectiveFromMatchday,
+		&i.Author,
+		&i.Reason,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const hasClosedMatchdayFrom = `-- name: HasClosedMatchdayFrom :one
+SELECT EXISTS (
+    SELECT 1 FROM matchdays WHERE season_id = $1 AND number >= $2 AND closed_at IS NOT NULL
+)
+`
+
+type HasClosedMatchdayFromParams struct {
+	SeasonID uuid.UUID
+	Number   int32
+}
+
+// True when matchday $2 or any later one of the season is already closed.
+func (q *Queries) HasClosedMatchdayFrom(ctx context.Context, arg HasClosedMatchdayFromParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasClosedMatchdayFrom, arg.SeasonID, arg.Number)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listRuleSets = `-- name: ListRuleSets :many
 SELECT id, version, content_hash, body, created_at FROM rule_sets ORDER BY id, created_at
 `
@@ -285,6 +332,42 @@ func (q *Queries) ListSeasons(ctx context.Context) ([]ListSeasonsRow, error) {
 			&i.CompetitionID,
 			&i.CompetitionName,
 			&i.CompetitionCountry,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSettingsVersions = `-- name: ListSettingsVersions :many
+SELECT league_id, seq, canonical_json, sha256, prev_sha256, schema, engine, effective_from_matchday, author, reason, created_at FROM settings_versions WHERE league_id = $1 ORDER BY seq
+`
+
+func (q *Queries) ListSettingsVersions(ctx context.Context, leagueID uuid.UUID) ([]SettingsVersion, error) {
+	rows, err := q.db.Query(ctx, listSettingsVersions, leagueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SettingsVersion
+	for rows.Next() {
+		var i SettingsVersion
+		if err := rows.Scan(
+			&i.LeagueID,
+			&i.Seq,
+			&i.CanonicalJson,
+			&i.Sha256,
+			&i.PrevSha256,
+			&i.Schema,
+			&i.Engine,
+			&i.EffectiveFromMatchday,
+			&i.Author,
+			&i.Reason,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -497,4 +580,27 @@ func (q *Queries) SeasonFixtures(ctx context.Context, seasonID uuid.UUID) ([]Sea
 		return nil, err
 	}
 	return items, nil
+}
+
+const settingsHead = `-- name: SettingsHead :one
+SELECT league_id, seq, canonical_json, sha256, prev_sha256, schema, engine, effective_from_matchday, author, reason, created_at FROM settings_versions WHERE league_id = $1 ORDER BY seq DESC LIMIT 1
+`
+
+func (q *Queries) SettingsHead(ctx context.Context, leagueID uuid.UUID) (SettingsVersion, error) {
+	row := q.db.QueryRow(ctx, settingsHead, leagueID)
+	var i SettingsVersion
+	err := row.Scan(
+		&i.LeagueID,
+		&i.Seq,
+		&i.CanonicalJson,
+		&i.Sha256,
+		&i.PrevSha256,
+		&i.Schema,
+		&i.Engine,
+		&i.EffectiveFromMatchday,
+		&i.Author,
+		&i.Reason,
+		&i.CreatedAt,
+	)
+	return i, err
 }

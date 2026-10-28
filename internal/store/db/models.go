@@ -88,10 +88,18 @@ type FixtureFact struct {
 	CreatedAt     time.Time
 }
 
+type League struct {
+	ID        uuid.UUID
+	SeasonID  uuid.UUID
+	Name      string
+	CreatedAt time.Time
+}
+
 type Matchday struct {
 	ID       uuid.UUID
 	SeasonID uuid.UUID
 	Number   int32
+	ClosedAt *time.Time
 }
 
 type Player struct {
@@ -151,6 +159,20 @@ type Season struct {
 	ID            uuid.UUID
 	CompetitionID uuid.UUID
 	Name          string
+}
+
+type SettingsVersion struct {
+	LeagueID              uuid.UUID
+	Seq                   int32
+	CanonicalJson         string
+	Sha256                string
+	PrevSha256            *string
+	Schema                string
+	Engine                string
+	EffectiveFromMatchday int32
+	Author                string
+	Reason                string
+	CreatedAt             time.Time
 }
 
 type Team struct {

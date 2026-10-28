@@ -104,3 +104,21 @@ ORDER BY f.id;
 
 -- name: FixtureMatchday :one
 SELECT matchday_id FROM fixtures WHERE id = $1;
+
+-- name: InsertLeague :exec
+INSERT INTO leagues (id, season_id, name, created_at) VALUES ($1, $2, $3, $4);
+
+-- name: CloseMatchday :execrows
+UPDATE matchdays SET closed_at = $3
+WHERE season_id = $1 AND number = $2 AND closed_at IS NULL;
+
+-- name: LockLeague :one
+-- Serializes concurrent settings submissions for one league.
+SELECT season_id FROM leagues WHERE id = $1 FOR UPDATE;
+
+-- name: InsertSettingsVersion :one
+INSERT INTO settings_versions (
+    league_id, seq, canonical_json, sha256, prev_sha256, schema, engine,
+    effective_from_matchday, author, reason, created_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING *;

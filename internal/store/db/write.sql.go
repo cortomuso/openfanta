@@ -12,6 +12,25 @@ import (
 	"github.com/google/uuid"
 )
 
+const closeMatchday = `-- name: CloseMatchday :execrows
+UPDATE matchdays SET closed_at = $3
+WHERE season_id = $1 AND number = $2 AND closed_at IS NULL
+`
+
+type CloseMatchdayParams struct {
+	SeasonID uuid.UUID
+	Number   int32
+	ClosedAt *time.Time
+}
+
+func (q *Queries) CloseMatchday(ctx context.Context, arg CloseMatchdayParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeMatchday, arg.SeasonID, arg.Number, arg.ClosedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const currentRun = `-- name: CurrentRun :one
 SELECT r.id, r.input_hash FROM current_runs cr
 JOIN computation_runs r ON r.id = cr.run_id
@@ -160,6 +179,27 @@ func (q *Queries) InsertFixtureFacts(ctx context.Context, arg InsertFixtureFacts
 	return id, err
 }
 
+const insertLeague = `-- name: InsertLeague :exec
+INSERT INTO leagues (id, season_id, name, created_at) VALUES ($1, $2, $3, $4)
+`
+
+type InsertLeagueParams struct {
+	ID        uuid.UUID
+	SeasonID  uuid.UUID
+	Name      string
+	CreatedAt time.Time
+}
+
+func (q *Queries) InsertLeague(ctx context.Context, arg InsertLeagueParams) error {
+	_, err := q.db.Exec(ctx, insertLeague,
+		arg.ID,
+		arg.SeasonID,
+		arg.Name,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 type InsertPlayerScoresParams struct {
 	RunID           uuid.UUID
 	PlayerID        uuid.UUID
@@ -306,6 +346,59 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 	return err
 }
 
+const insertSettingsVersion = `-- name: InsertSettingsVersion :one
+INSERT INTO settings_versions (
+    league_id, seq, canonical_json, sha256, prev_sha256, schema, engine,
+    effective_from_matchday, author, reason, created_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING league_id, seq, canonical_json, sha256, prev_sha256, schema, engine, effective_from_matchday, author, reason, created_at
+`
+
+type InsertSettingsVersionParams struct {
+	LeagueID              uuid.UUID
+	Seq                   int32
+	CanonicalJson         string
+	Sha256                string
+	PrevSha256            *string
+	Schema                string
+	Engine                string
+	EffectiveFromMatchday int32
+	Author                string
+	Reason                string
+	CreatedAt             time.Time
+}
+
+func (q *Queries) InsertSettingsVersion(ctx context.Context, arg InsertSettingsVersionParams) (SettingsVersion, error) {
+	row := q.db.QueryRow(ctx, insertSettingsVersion,
+		arg.LeagueID,
+		arg.Seq,
+		arg.CanonicalJson,
+		arg.Sha256,
+		arg.PrevSha256,
+		arg.Schema,
+		arg.Engine,
+		arg.EffectiveFromMatchday,
+		arg.Author,
+		arg.Reason,
+		arg.CreatedAt,
+	)
+	var i SettingsVersion
+	err := row.Scan(
+		&i.LeagueID,
+		&i.Seq,
+		&i.CanonicalJson,
+		&i.Sha256,
+		&i.PrevSha256,
+		&i.Schema,
+		&i.Engine,
+		&i.EffectiveFromMatchday,
+		&i.Author,
+		&i.Reason,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const latestFixtureFacts = `-- name: LatestFixtureFacts :one
 SELECT id, fixture_id, facts, facts_hash, normalizer, raw_payload_ids, created_at FROM fixture_facts WHERE fixture_id = $1 ORDER BY id DESC LIMIT 1
 `
@@ -361,6 +454,18 @@ SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
 func (q *Queries) LockComputation(ctx context.Context, key string) error {
 	_, err := q.db.Exec(ctx, lockComputation, key)
 	return err
+}
+
+const lockLeague = `-- name: LockLeague :one
+SELECT season_id FROM leagues WHERE id = $1 FOR UPDATE
+`
+
+// Serializes concurrent settings submissions for one league.
+func (q *Queries) LockLeague(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLeague, id)
+	var season_id uuid.UUID
+	err := row.Scan(&season_id)
+	return season_id, err
 }
 
 const setCurrentRun = `-- name: SetCurrentRun :exec
