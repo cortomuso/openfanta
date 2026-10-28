@@ -11,11 +11,11 @@ Main endpoints:
 ```
 GET /v1/seasons
 GET /v1/seasons/{seasonId}/matchdays
-GET /v1/seasons/{seasonId}/matchdays/{n}/scores?ruleset=classic&voto_source=provider-rating
+GET /v1/seasons/{seasonId}/matchdays/{n}/scores?voto_source=provider-rating
 GET /v1/seasons/{seasonId}/players/{playerId}/scores
 GET /v1/fixtures/{fixtureId}/scores
 GET /v1/fixtures/{fixtureId}/runs
-GET /v1/rulesets            GET /v1/rulesets/{id}/versions/{version}
+GET /v1/settings/default
 GET /healthz                GET /readyz
 ```
 

@@ -2,10 +2,10 @@ name: docs
 
 on:
   pull_request:
-    paths: [docs/**, api/openapi.yaml, rulesets/**, website/**, .github/workflows/docs.yml]
+    paths: [docs/**, api/openapi.yaml, website/**, .github/workflows/docs.yml]
   push:
     branches: [main]
-    paths: [docs/**, api/openapi.yaml, rulesets/**, website/**, .github/workflows/docs.yml]
+    paths: [docs/**, api/openapi.yaml, website/**, .github/workflows/docs.yml]
   workflow_dispatch:
 
 permissions:
