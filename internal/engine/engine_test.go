@@ -6,20 +6,12 @@ import (
 	"testing"
 
 	d "github.com/openfanta/openfanta/internal/domain"
-	"github.com/openfanta/openfanta/internal/rules"
+	"github.com/openfanta/openfanta/internal/settings"
 )
 
-func classic(t *testing.T) *rules.RuleSet {
+func classic(t *testing.T) settings.Player {
 	t.Helper()
-	reg, err := rules.LoadBuiltin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	rs, ok := reg.Get("classic", "1.0.0")
-	if !ok {
-		t.Fatal("classic@1.0.0 missing")
-	}
-	return rs
+	return settings.Classic().Doc.Player
 }
 
 func pts(p d.Points) *d.Points { return &p }
@@ -38,7 +30,7 @@ func keeper(id string, mod func(*d.PlayerLine)) d.PlayerLine {
 	return l
 }
 
-func item(code rules.Code, count int, points d.Points) BreakdownItem {
+func item(code Code, count int, points d.Points) BreakdownItem {
 	return BreakdownItem{Code: code, Count: count, Points: points}
 }
 
@@ -57,37 +49,37 @@ func TestClassic(t *testing.T) {
 		{
 			name: "brace with assist", line: outfield("p", func(l *d.PlayerLine) { l.Goals, l.Assists = 2, 1 }),
 			voto: pts(750), wantVoto: pts(750), wantFanta: pts(1450),
-			breakdown: []BreakdownItem{item(rules.Goal, 2, 600), item(rules.Assist, 1, 100)},
+			breakdown: []BreakdownItem{item(Goal, 2, 600), item(Assist, 1, 100)},
 		},
 		{
 			name: "penalty scored", line: outfield("p", func(l *d.PlayerLine) { l.PenaltiesScored = 1 }),
 			voto: pts(650), wantVoto: pts(650), wantFanta: pts(950),
-			breakdown: []BreakdownItem{item(rules.PenaltyScored, 1, 300)},
+			breakdown: []BreakdownItem{item(PenaltyScored, 1, 300)},
 		},
 		{
 			name: "penalty missed", line: outfield("p", func(l *d.PlayerLine) { l.PenaltiesMissed = 1 }),
 			voto: pts(500), wantVoto: pts(500), wantFanta: pts(200),
-			breakdown: []BreakdownItem{item(rules.PenaltyMissed, 1, -300)},
+			breakdown: []BreakdownItem{item(PenaltyMissed, 1, -300)},
 		},
 		{
 			name: "own goal", line: outfield("p", func(l *d.PlayerLine) { l.OwnGoals = 1 }),
 			voto: pts(550), wantVoto: pts(550), wantFanta: pts(350),
-			breakdown: []BreakdownItem{item(rules.OwnGoal, 1, -200)},
+			breakdown: []BreakdownItem{item(OwnGoal, 1, -200)},
 		},
 		{
 			name: "yellow", line: outfield("p", func(l *d.PlayerLine) { l.YellowCards = 1 }),
 			voto: pts(600), wantVoto: pts(600), wantFanta: pts(550),
-			breakdown: []BreakdownItem{item(rules.YellowCard, 1, -50)},
+			breakdown: []BreakdownItem{item(YellowCard, 1, -50)},
 		},
 		{
 			name: "second yellow counts only as red", line: outfield("p", func(l *d.PlayerLine) { l.YellowCards, l.SentOff, l.Minutes = 2, true, 60 }),
 			voto: pts(500), wantVoto: pts(500), wantFanta: pts(400),
-			breakdown: []BreakdownItem{item(rules.RedCard, 1, -100)},
+			breakdown: []BreakdownItem{item(RedCard, 1, -100)},
 		},
 		{
 			name: "straight red", line: outfield("p", func(l *d.PlayerLine) { l.SentOff, l.Minutes = true, 30 }),
 			voto: pts(450), wantVoto: pts(450), wantFanta: pts(350),
-			breakdown: []BreakdownItem{item(rules.RedCard, 1, -100)},
+			breakdown: []BreakdownItem{item(RedCard, 1, -100)},
 		},
 		{
 			name: "outfield conceded goals are ignored", line: outfield("p", func(l *d.PlayerLine) { l.GoalsConceded = 3 }),
@@ -96,22 +88,22 @@ func TestClassic(t *testing.T) {
 		{
 			name: "keeper clean sheet", line: keeper("gk", nil),
 			voto: pts(650), wantVoto: pts(650), wantFanta: pts(750),
-			breakdown: []BreakdownItem{item(rules.GKCleanSheet, 1, 100)},
+			breakdown: []BreakdownItem{item(GKCleanSheet, 1, 100)},
 		},
 		{
 			name: "keeper concedes two", line: keeper("gk", func(l *d.PlayerLine) { l.GoalsConceded = 2 }),
 			voto: pts(550), wantVoto: pts(550), wantFanta: pts(350),
-			breakdown: []BreakdownItem{item(rules.GKGoalConceded, 2, -200)},
+			breakdown: []BreakdownItem{item(GKGoalConceded, 2, -200)},
 		},
 		{
 			name: "keeper saves a penalty and keeps a clean sheet", line: keeper("gk", func(l *d.PlayerLine) { l.PenaltiesSaved = 1 }),
 			voto: pts(700), wantVoto: pts(700), wantFanta: pts(1100),
-			breakdown: []BreakdownItem{item(rules.PenaltySaved, 1, 300), item(rules.GKCleanSheet, 1, 100)},
+			breakdown: []BreakdownItem{item(PenaltySaved, 1, 300), item(GKCleanSheet, 1, 100)},
 		},
 		{
 			name: "keeper subbed on late keeps a clean sheet", line: keeper("gk", func(l *d.PlayerLine) { l.Minutes = 20 }),
 			voto: pts(600), wantVoto: pts(600), wantFanta: pts(700),
-			breakdown: []BreakdownItem{item(rules.GKCleanSheet, 1, 100)},
+			breakdown: []BreakdownItem{item(GKCleanSheet, 1, 100)},
 		},
 		{
 			name: "s.v. without events", line: outfield("p", func(l *d.PlayerLine) { l.Minutes = 10 }),
@@ -128,17 +120,17 @@ func TestClassic(t *testing.T) {
 		{
 			name: "s.v. with a goal gets voto d'ufficio 6", line: outfield("p", func(l *d.PlayerLine) { l.Minutes, l.Goals = 5, 1 }),
 			wantVoto: pts(600), wantFanta: pts(900), ufficio: true,
-			breakdown: []BreakdownItem{item(rules.Goal, 1, 300)},
+			breakdown: []BreakdownItem{item(Goal, 1, 300)},
 		},
 		{
 			name: "s.v. with a red card gets voto d'ufficio 4", line: outfield("p", func(l *d.PlayerLine) { l.Minutes, l.SentOff = 3, true }),
 			wantVoto: pts(400), wantFanta: pts(300), ufficio: true,
-			breakdown: []BreakdownItem{item(rules.RedCard, 1, -100)},
+			breakdown: []BreakdownItem{item(RedCard, 1, -100)},
 		},
 		{
 			name: "s.v. red card wins over goal (first rule)", line: outfield("p", func(l *d.PlayerLine) { l.Minutes, l.Goals, l.SentOff = 8, 1, true }),
 			wantVoto: pts(400), wantFanta: pts(600), ufficio: true,
-			breakdown: []BreakdownItem{item(rules.Goal, 1, 300), item(rules.RedCard, 1, -100)},
+			breakdown: []BreakdownItem{item(Goal, 1, 300), item(RedCard, 1, -100)},
 		},
 		{
 			name: "s.v. with only an assist stays s.v.", line: outfield("p", func(l *d.PlayerLine) { l.Minutes, l.Assists = 5, 1 }),
@@ -216,8 +208,7 @@ func TestFantavotoEqualsVotoPlusBreakdown(t *testing.T) {
 			if b.Count <= 0 {
 				t.Fatalf("breakdown item with non-positive count: %+v", b)
 			}
-			v, _ := rs.Scores.Value(b.Code)
-			if b.Points != v*d.Points(b.Count) {
+			if b.Points != value(rs, b.Code, l.Role)*d.Points(b.Count) {
 				t.Fatalf("item points mismatch: %+v", b)
 			}
 			sum += b.Points
@@ -251,13 +242,21 @@ func TestDeterministicAndOrderIndependent(t *testing.T) {
 	}
 }
 
-func TestCustomRuleSetValuesAreRespected(t *testing.T) {
-	rs := *classic(t)
-	rs.Scores.Goal = 350
-	rs.Options.RedReplacesYellow = false
-	rs.Options.GKCleanSheetMinMinutes = 90
-	rs.SenzaVoto.MinMinutes = 0
-	rs.SenzaVoto.VotoUfficio = nil
+func TestCustomSettingsAreRespected(t *testing.T) {
+	rs := classic(t)
+	events := map[string]settings.Event{}
+	for id, e := range rs.Events {
+		events[id] = e
+	}
+	goal := d.Points(350)
+	events[settings.EventGoal] = settings.Event{Value: &goal}
+	ninety := 90
+	cs := events[settings.EventCleanSheet]
+	cs.MinMinutes = &ninety
+	events[settings.EventCleanSheet] = cs
+	rs.Events = events
+	rs.Cards.RedReplacesYellow = false
+	rs.SenzaVoto = settings.SenzaVoto{}
 
 	lines := []d.PlayerLine{
 		outfield("scorer", func(l *d.PlayerLine) { l.Goals = 1 }),
@@ -267,7 +266,7 @@ func TestCustomRuleSetValuesAreRespected(t *testing.T) {
 	}
 	votes := map[d.PlayerID]d.Points{"scorer": 600, "booked": 500, "late": 600, "cameo": 600}
 	got := map[d.PlayerID]Score{}
-	for _, s := range Compute(lines, votes, &rs) {
+	for _, s := range Compute(lines, votes, rs) {
 		got[s.Line.Player] = s
 	}
 	if f := *got["scorer"].Fantavoto; f != 950 {

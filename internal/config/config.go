@@ -21,7 +21,6 @@ type Config struct {
 	HTTPAddr         string        // OPENFANTA_HTTP_ADDR (default ":8080")
 	LogLevel         slog.Level    // OPENFANTA_LOG_LEVEL: debug, info, warn, error (default info)
 	LogFormat        string        // OPENFANTA_LOG_FORMAT: json or text (default json)
-	RulesetsDir      string        // OPENFANTA_RULESETS_DIR: extra rule sets, merged with the built-in ones
 	ShutdownTimeout  time.Duration // OPENFANTA_SHUTDOWN_TIMEOUT (default 15s)
 	MigrateOnStartup bool          // OPENFANTA_MIGRATE_ON_STARTUP (default false)
 }
@@ -34,7 +33,6 @@ func Load(getenv func(string) string) (Config, error) {
 		SportmonksURL:   getenv("OPENFANTA_SPORTMONKS_BASE_URL"),
 		HTTPAddr:        or(getenv("OPENFANTA_HTTP_ADDR"), ":8080"),
 		LogFormat:       or(getenv("OPENFANTA_LOG_FORMAT"), "json"),
-		RulesetsDir:     getenv("OPENFANTA_RULESETS_DIR"),
 	}
 	var errs []error
 	var err error

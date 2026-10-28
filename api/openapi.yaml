@@ -22,7 +22,7 @@ tags:
   - name: health
   - name: scores
   - name: catalog
-  - name: rulesets
+  - name: settings
 paths:
   /healthz:
     get:
@@ -49,39 +49,18 @@ paths:
         "503":
           $ref: "#/components/responses/Problem"
 
-  /v1/rulesets:
+  /v1/settings/default:
     get:
-      tags: [rulesets]
-      operationId: listRuleSets
-      summary: List every published rule set version
+      tags: [settings]
+      operationId: getDefaultSettings
+      summary: Get the default league settings document (Classic)
+      description: Scores are computed under this document until leagues score under their own.
       responses:
         "200":
-          description: Rule sets, ordered by id then publication time.
+          description: The document, in canonical JSON, with its hash.
           content:
             application/json:
-              schema:
-                type: object
-                required: [rulesets]
-                properties:
-                  rulesets:
-                    type: array
-                    items: { $ref: "#/components/schemas/RuleSetSummary" }
-  /v1/rulesets/{rulesetId}/versions/{version}:
-    get:
-      tags: [rulesets]
-      operationId: getRuleSet
-      summary: Get one rule set version, as published
-      parameters:
-        - { name: rulesetId, in: path, required: true, schema: { type: string } }
-        - { name: version, in: path, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: The rule set.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/RuleSet" }
-        "404":
-          $ref: "#/components/responses/Problem"
+              schema: { $ref: "#/components/schemas/Settings" }
 
   /v1/seasons:
     get:
@@ -132,7 +111,6 @@ paths:
       parameters:
         - $ref: "#/components/parameters/SeasonId"
         - { name: number, in: path, required: true, schema: { type: integer, minimum: 1 } }
-        - $ref: "#/components/parameters/RuleSetQuery"
         - $ref: "#/components/parameters/VotoSourceQuery"
       responses:
         "200":
@@ -152,7 +130,6 @@ paths:
       parameters:
         - $ref: "#/components/parameters/SeasonId"
         - $ref: "#/components/parameters/PlayerId"
-        - $ref: "#/components/parameters/RuleSetQuery"
         - $ref: "#/components/parameters/VotoSourceQuery"
       responses:
         "200":
@@ -171,7 +148,6 @@ paths:
       summary: Voti and fantavoti for every player of a fixture
       parameters:
         - $ref: "#/components/parameters/FixtureId"
-        - $ref: "#/components/parameters/RuleSetQuery"
         - $ref: "#/components/parameters/VotoSourceQuery"
       responses:
         "200":
@@ -233,11 +209,6 @@ components:
       { name: playerId, in: path, required: true, schema: { type: string, format: uuid } }
     FixtureId:
       { name: fixtureId, in: path, required: true, schema: { type: string, format: uuid } }
-    RuleSetQuery:
-      name: ruleset
-      in: query
-      description: Rule set family. The latest computed version is served.
-      schema: { type: string, default: classic }
     VotoSourceQuery:
       name: voto_source
       in: query
@@ -308,16 +279,15 @@ components:
       type: object
       required: [code, count, points]
       properties:
-        code: { type: string, example: goal, description: "A rule set scoring key" }
+        code: { type: string, example: goal, description: "A scoring code" }
         count: { type: integer, minimum: 1 }
         points: { $ref: "#/components/schemas/Decimal" }
     RunRef:
       type: object
-      required: [id, ruleset, ruleset_version, voto_source, computed_at]
+      required: [id, settings_sha256, voto_source, computed_at]
       properties:
         id: { type: string }
-        ruleset: { type: string }
-        ruleset_version: { type: string }
+        settings_sha256: { type: string }
         voto_source: { type: string }
         computed_at: { type: string, format: date-time }
     Score:
@@ -361,20 +331,19 @@ components:
         goals_conceded: { type: integer, minimum: 0, description: "Goals the player's team conceded while the player was on the pitch, own goals included" }
     ScoreList:
       type: object
-      required: [ruleset, voto_source, scores]
+      required: [settings_sha256, voto_source, scores]
       properties:
-        ruleset: { type: string }
+        settings_sha256: { type: string }
         voto_source: { type: string }
         scores:
           type: array
           items: { $ref: "#/components/schemas/Score" }
     Run:
       type: object
-      required: [id, ruleset, ruleset_version, voto_source, engine_version, input_hash, reason, created_at, current]
+      required: [id, settings_sha256, voto_source, engine_version, input_hash, reason, created_at, current]
       properties:
         id: { type: string }
-        ruleset: { type: string }
-        ruleset_version: { type: string }
+        settings_sha256: { type: string }
         voto_source: { type: string }
         engine_version: { type: string }
         input_hash: { type: string }
@@ -382,24 +351,12 @@ components:
         reason: { type: string }
         created_at: { type: string, format: date-time }
         current: { type: boolean }
-    RuleSetSummary:
+    Settings:
       type: object
-      required: [id, version, name, content_hash, published_at]
+      required: [sha256, body]
       properties:
-        id: { type: string }
-        version: { type: string }
-        name: { type: string }
-        content_hash: { type: string }
-        published_at: { type: string, format: date-time }
-    RuleSet:
-      type: object
-      required: [id, version, content_hash, published_at, body]
-      properties:
-        id: { type: string }
-        version: { type: string }
-        content_hash: { type: string }
-        published_at: { type: string, format: date-time }
+        sha256: { type: string, description: "sha256 of the canonical JSON of body" }
         body:
           type: object
           additionalProperties: true
-          description: The rule set as published; see rulesets/schema.json. Point values are integer hundredths.
+          description: The settings document; see internal/settings/schema/v1.json. Point values are integer hundredths.

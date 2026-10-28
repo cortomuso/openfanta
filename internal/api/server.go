@@ -13,12 +13,12 @@ import (
 
 	"github.com/openfanta/openfanta/internal/domain"
 	"github.com/openfanta/openfanta/internal/engine"
+	"github.com/openfanta/openfanta/internal/settings"
 	"github.com/openfanta/openfanta/internal/store/db"
 )
 
-// Defaults for optional query parameters.
+// DefaultVotoSource is the voto source used when none is requested.
 const (
-	DefaultRuleSet    = "classic"
 	DefaultVotoSource = "provider-rating"
 )
 
@@ -90,41 +90,14 @@ func (s *Server) GetReady(ctx context.Context, _ GetReadyRequestObject) (GetRead
 	return GetReady200JSONResponse{Status: "ok"}, nil
 }
 
-// ListRuleSets implements StrictServerInterface.
-func (s *Server) ListRuleSets(ctx context.Context, _ ListRuleSetsRequestObject) (ListRuleSetsResponseObject, error) {
-	rows, err := s.q.ListRuleSets(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := ListRuleSets200JSONResponse{Rulesets: make([]RuleSetSummary, 0, len(rows))}
-	for _, r := range rows {
-		var meta struct {
-			Name string `json:"name"`
-		}
-		_ = json.Unmarshal(r.Body, &meta)
-		out.Rulesets = append(out.Rulesets, RuleSetSummary{
-			Id: r.ID, Version: r.Version, Name: meta.Name, ContentHash: r.ContentHash, PublishedAt: r.CreatedAt,
-		})
-	}
-	return out, nil
-}
-
-// GetRuleSet implements StrictServerInterface.
-func (s *Server) GetRuleSet(ctx context.Context, req GetRuleSetRequestObject) (GetRuleSetResponseObject, error) {
-	r, err := s.q.GetRuleSet(ctx, db.GetRuleSetParams{ID: req.RulesetId, Version: req.Version})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return GetRuleSet404ApplicationProblemPlusJSONResponse{
-			ProblemApplicationProblemPlusJSONResponse(notFound("rule set %s@%s not found", req.RulesetId, req.Version)),
-		}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
+// GetDefaultSettings implements StrictServerInterface.
+func (s *Server) GetDefaultSettings(_ context.Context, _ GetDefaultSettingsRequestObject) (GetDefaultSettingsResponseObject, error) {
+	d := settings.Classic()
 	var body map[string]any
-	if err := json.Unmarshal(r.Body, &body); err != nil {
+	if err := json.Unmarshal(d.Canonical, &body); err != nil {
 		return nil, err
 	}
-	return GetRuleSet200JSONResponse{Id: r.ID, Version: r.Version, ContentHash: r.ContentHash, PublishedAt: r.CreatedAt, Body: body}, nil
+	return GetDefaultSettings200JSONResponse{Sha256: d.SHA256, Body: body}, nil
 }
 
 // ListSeasons implements StrictServerInterface.
@@ -176,7 +149,7 @@ func (s *Server) ListMatchdays(ctx context.Context, req ListMatchdaysRequestObje
 
 // GetMatchdayScores implements StrictServerInterface.
 func (s *Server) GetMatchdayScores(ctx context.Context, req GetMatchdayScoresRequestObject) (GetMatchdayScoresResponseObject, error) {
-	rs, vs := or(req.Params.Ruleset, DefaultRuleSet), or(req.Params.VotoSource, DefaultVotoSource)
+	rs, vs := settings.Classic().SHA256, or(req.Params.VotoSource, DefaultVotoSource)
 	exists, err := s.q.MatchdayExists(ctx, db.MatchdayExistsParams{SeasonID: req.SeasonId, Number: int32(req.Number)})
 	if err != nil {
 		return nil, err
@@ -184,7 +157,7 @@ func (s *Server) GetMatchdayScores(ctx context.Context, req GetMatchdayScoresReq
 	if !exists {
 		return GetMatchdayScores404ApplicationProblemPlusJSONResponse(notFound("matchday %d of season %s not found", req.Number, req.SeasonId)), nil
 	}
-	rows, err := s.q.MatchdayScores(ctx, db.MatchdayScoresParams{SeasonID: req.SeasonId, Matchday: int32(req.Number), RuleSetID: rs, VotoSource: vs})
+	rows, err := s.q.MatchdayScores(ctx, db.MatchdayScoresParams{SeasonID: req.SeasonId, Matchday: int32(req.Number), SettingsSha256: rs, VotoSource: vs})
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +167,7 @@ func (s *Server) GetMatchdayScores(ctx context.Context, req GetMatchdayScoresReq
 
 // GetPlayerSeasonScores implements StrictServerInterface.
 func (s *Server) GetPlayerSeasonScores(ctx context.Context, req GetPlayerSeasonScoresRequestObject) (GetPlayerSeasonScoresResponseObject, error) {
-	rs, vs := or(req.Params.Ruleset, DefaultRuleSet), or(req.Params.VotoSource, DefaultVotoSource)
+	rs, vs := settings.Classic().SHA256, or(req.Params.VotoSource, DefaultVotoSource)
 	if _, err := s.q.GetSeason(ctx, req.SeasonId); errors.Is(err, pgx.ErrNoRows) {
 		return GetPlayerSeasonScores404ApplicationProblemPlusJSONResponse(notFound("season %s not found", req.SeasonId)), nil
 	} else if err != nil {
@@ -205,7 +178,7 @@ func (s *Server) GetPlayerSeasonScores(ctx context.Context, req GetPlayerSeasonS
 	} else if err != nil {
 		return nil, err
 	}
-	rows, err := s.q.PlayerSeasonScores(ctx, db.PlayerSeasonScoresParams{SeasonID: req.SeasonId, PlayerID: req.PlayerId, RuleSetID: rs, VotoSource: vs})
+	rows, err := s.q.PlayerSeasonScores(ctx, db.PlayerSeasonScoresParams{SeasonID: req.SeasonId, PlayerID: req.PlayerId, SettingsSha256: rs, VotoSource: vs})
 	if err != nil {
 		return nil, err
 	}
@@ -215,13 +188,13 @@ func (s *Server) GetPlayerSeasonScores(ctx context.Context, req GetPlayerSeasonS
 
 // GetFixtureScores implements StrictServerInterface.
 func (s *Server) GetFixtureScores(ctx context.Context, req GetFixtureScoresRequestObject) (GetFixtureScoresResponseObject, error) {
-	rs, vs := or(req.Params.Ruleset, DefaultRuleSet), or(req.Params.VotoSource, DefaultVotoSource)
+	rs, vs := settings.Classic().SHA256, or(req.Params.VotoSource, DefaultVotoSource)
 	if _, err := s.q.GetFixture(ctx, req.FixtureId); errors.Is(err, pgx.ErrNoRows) {
 		return GetFixtureScores404ApplicationProblemPlusJSONResponse(notFound("fixture %s not found", req.FixtureId)), nil
 	} else if err != nil {
 		return nil, err
 	}
-	rows, err := s.q.FixtureScores(ctx, db.FixtureScoresParams{FixtureID: req.FixtureId, RuleSetID: rs, VotoSource: vs})
+	rows, err := s.q.FixtureScores(ctx, db.FixtureScoresParams{FixtureID: req.FixtureId, SettingsSha256: rs, VotoSource: vs})
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +224,7 @@ func (s *Server) GetFixtureRuns(ctx context.Context, req GetFixtureRunsRequestOb
 	}
 	for _, r := range rows {
 		run := Run{
-			Id: r.ID.String(), Ruleset: r.RuleSetID, RulesetVersion: r.RuleSetVersion, VotoSource: r.VotoSource,
+			Id: r.ID.String(), SettingsSha256: r.SettingsSha256, VotoSource: r.VotoSource,
 			EngineVersion: r.EngineVersion, InputHash: r.InputHash, Reason: r.Reason, CreatedAt: r.CreatedAt, Current: r.IsCurrent,
 		}
 		if r.SupersedesRunID != nil {
@@ -276,7 +249,7 @@ func (s *Server) GetPlayer(ctx context.Context, req GetPlayerRequestObject) (Get
 }
 
 func scoreList(rs, vs string, rows []db.CurrentScore) (ScoreList, error) {
-	out := ScoreList{Ruleset: rs, VotoSource: vs, Scores: make([]Score, 0, len(rows))}
+	out := ScoreList{SettingsSha256: rs, VotoSource: vs, Scores: make([]Score, 0, len(rows))}
 	for _, r := range rows {
 		sc, err := score(r)
 		if err != nil {
@@ -306,7 +279,7 @@ func score(r db.CurrentScore) (Score, error) {
 			YellowCards: int(r.YellowCards), SentOff: r.SentOff, GoalsConceded: int(r.GoalsConceded),
 		},
 		Breakdown: breakdown,
-		Run:       RunRef{Id: r.RunID.String(), Ruleset: r.RuleSetID, RulesetVersion: r.RuleSetVersion, VotoSource: r.VotoSource, ComputedAt: r.ComputedAt},
+		Run:       RunRef{Id: r.RunID.String(), SettingsSha256: r.SettingsSha256, VotoSource: r.VotoSource, ComputedAt: r.ComputedAt},
 	}, nil
 }
 

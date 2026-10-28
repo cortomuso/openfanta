@@ -18,7 +18,7 @@ import (
 	"github.com/openfanta/openfanta/internal/domain"
 	"github.com/openfanta/openfanta/internal/engine"
 	"github.com/openfanta/openfanta/internal/provider"
-	"github.com/openfanta/openfanta/internal/rules"
+	"github.com/openfanta/openfanta/internal/settings"
 	"github.com/openfanta/openfanta/internal/store"
 	"github.com/openfanta/openfanta/internal/store/db"
 	"github.com/openfanta/openfanta/internal/timeline"
@@ -36,7 +36,9 @@ const (
 type Service struct {
 	Store    *store.Store
 	Provider provider.Provider
-	Rules    *rules.Registry
+	// Settings are the rules fixtures are scored under. Nil means the Classic
+	// default until per-league scoring exists.
+	Settings *settings.Settings
 	Voto     voto.Source
 	Logger   *slog.Logger
 	Now      func() time.Time
@@ -233,8 +235,8 @@ func toProviderRaw(p store.RawPayload) provider.Raw {
 	return provider.Raw{Key: p.RequestKey, Status: p.Status, Body: p.Body, FetchedAt: p.FetchedAt}
 }
 
-// compute scores stored facts under the latest version of every rule set and
-// records a run for each. It returns how many new runs were created.
+// compute scores stored facts under the service settings and records a run.
+// It returns how many new runs were created (0 or 1).
 func (s *Service) compute(ctx context.Context, f store.Facts, reason string) (int, error) {
 	lines, err := timeline.Derive(f.Facts)
 	if err != nil {
@@ -244,26 +246,27 @@ func (s *Service) compute(ctx context.Context, f store.Facts, reason string) (in
 	if err != nil {
 		return 0, fmt.Errorf("voto source %s: %w", s.Voto.Name(), err)
 	}
-	created := 0
-	for _, rs := range s.Rules.LatestOfEach() {
-		scores := engine.Compute(lines, votes, rs)
-		_, isNew, err := s.Store.RecordRun(ctx, store.RunInput{
-			FixtureID: f.FixtureID, FactsID: f.ID, RuleSet: rs, VotoSource: s.Voto.Name(),
-			InputHash: inputHash(f.Hash, rs, s.Voto.Name(), votes), Reason: reason, Scores: scores,
-		})
-		if err != nil {
-			return created, fmt.Errorf("record %s run: %w", rs.Key(), err)
-		}
-		if isNew {
-			created++
-		}
+	st := s.Settings
+	if st == nil {
+		st = settings.Classic()
 	}
-	return created, nil
+	scores := engine.Compute(lines, votes, st.Doc.Player)
+	_, isNew, err := s.Store.RecordRun(ctx, store.RunInput{
+		FixtureID: f.FixtureID, FactsID: f.ID, Settings: st, VotoSource: s.Voto.Name(),
+		InputHash: inputHash(f.Hash, st, s.Voto.Name(), votes), Reason: reason, Scores: scores,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("record run under settings %s: %w", st.SHA256, err)
+	}
+	if isNew {
+		return 1, nil
+	}
+	return 0, nil
 }
 
 // inputHash identifies everything that determines a run's result. Two runs
 // with the same hash are guaranteed to have identical scores.
-func inputHash(factsHash string, rs *rules.RuleSet, votoSource string, votes map[domain.PlayerID]domain.Points) string {
+func inputHash(factsHash string, st *settings.Settings, votoSource string, votes map[domain.PlayerID]domain.Points) string {
 	players := make([]string, 0, len(votes))
 	for p := range votes {
 		players = append(players, string(p))
@@ -274,7 +277,7 @@ func inputHash(factsHash string, rs *rules.RuleSet, votoSource string, votes map
 		pairs[i] = [2]string{p, strconv.FormatInt(int64(votes[domain.PlayerID(p)]), 10)}
 	}
 	b, _ := json.Marshal(map[string]any{
-		"facts": factsHash, "rule_set": rs.Key(), "rule_set_hash": rs.Hash(),
+		"facts": factsHash, "settings": st.SHA256,
 		"voto_source": votoSource, "votes": pairs, "engine": engine.Version,
 	})
 	return domain.SHA256Hex(b)

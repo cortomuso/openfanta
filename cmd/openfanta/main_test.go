@@ -28,25 +28,13 @@ func TestUsage(t *testing.T) {
 	}
 }
 
-func TestRulesetsCommand(t *testing.T) {
+func TestSettingsCommand(t *testing.T) {
 	var out bytes.Buffer
-	if err := run(context.Background(), []string{"rulesets"}, &out); err != nil {
+	if err := run(context.Background(), []string{"settings"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "classic@1.0.0") {
+	if !strings.HasPrefix(out.String(), `{"engine":`) || !strings.Contains(out.String(), `"game":"classic"`) {
 		t.Errorf("output = %q", out.String())
-	}
-}
-
-func TestExtraRulesetsDir(t *testing.T) {
-	t.Setenv("OPENFANTA_RULESETS_DIR", t.TempDir())
-	var out bytes.Buffer
-	if err := run(context.Background(), []string{"rulesets"}, &out); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("OPENFANTA_RULESETS_DIR", "/does/not/exist")
-	if err := run(context.Background(), []string{"rulesets"}, &out); err == nil {
-		t.Fatal("missing rule set dir should fail")
 	}
 }
 
@@ -76,7 +64,7 @@ func TestCommandsRequireConfiguration(t *testing.T) {
 		t.Errorf("ingest without token: %v", err)
 	}
 	t.Setenv("OPENFANTA_LOG_LEVEL", "loud")
-	if err := run(context.Background(), []string{"rulesets"}, &out); err == nil {
+	if err := run(context.Background(), []string{"settings"}, &out); err == nil {
 		t.Error("invalid config should fail")
 	}
 }

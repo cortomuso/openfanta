@@ -31,13 +31,13 @@ func TestOverrides(t *testing.T) {
 		"OPENFANTA_DATABASE_URL": "postgres://x", "OPENFANTA_SPORTMONKS_TOKEN": "t",
 		"OPENFANTA_HTTP_ADDR": ":9000", "OPENFANTA_LOG_LEVEL": "debug", "OPENFANTA_LOG_FORMAT": "text",
 		"OPENFANTA_SPORTMONKS_REQUESTS_PER_HOUR": "100", "OPENFANTA_SHUTDOWN_TIMEOUT": "3s",
-		"OPENFANTA_MIGRATE_ON_STARTUP": "true", "OPENFANTA_RULESETS_DIR": "/rules",
+		"OPENFANTA_MIGRATE_ON_STARTUP": "true",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c.HTTPAddr != ":9000" || c.LogLevel != slog.LevelDebug || c.RequestsPerHour != 100 ||
-		c.ShutdownTimeout != 3*time.Second || !c.MigrateOnStartup || c.RulesetsDir != "/rules" {
+		c.ShutdownTimeout != 3*time.Second || !c.MigrateOnStartup {
 		t.Errorf("config = %+v", c)
 	}
 	if c.RequireDatabase() != nil || c.RequireSportmonks() != nil {

@@ -1,4 +1,4 @@
-// Package store persists raw payloads, normalized facts, rule sets and
+// Package store persists raw payloads, normalized facts, settings histories and
 // versioned computation results in Postgres.
 package store
 
@@ -21,7 +21,7 @@ import (
 
 	"github.com/openfanta/openfanta/internal/domain"
 	"github.com/openfanta/openfanta/internal/engine"
-	"github.com/openfanta/openfanta/internal/rules"
+	"github.com/openfanta/openfanta/internal/settings"
 	"github.com/openfanta/openfanta/internal/store/db"
 )
 
@@ -30,10 +30,6 @@ var migrations embed.FS
 
 // ErrNotFound is returned when a requested row does not exist.
 var ErrNotFound = errors.New("not found")
-
-// ErrRuleSetChanged is returned when a published rule set version is loaded
-// with different content. Published versions are immutable: bump the version.
-var ErrRuleSetChanged = errors.New("published rule set changed without a version bump")
 
 // Store wraps a pgx pool with typed operations.
 type Store struct {
@@ -155,28 +151,6 @@ func Resolve(ctx context.Context, q *db.Queries, provider, entity, externalID st
 	return q.InsertRef(ctx, db.InsertRefParams{Provider: provider, Entity: entity, ExternalID: externalID, EntityID: fresh})
 }
 
-// SyncRuleSets records every rule set, refusing a changed published version.
-func (s *Store) SyncRuleSets(ctx context.Context, sets []*rules.RuleSet) error {
-	for _, rs := range sets {
-		hash, err := s.q.GetRuleSetHash(ctx, db.GetRuleSetHashParams{ID: rs.ID, Version: rs.Version})
-		switch {
-		case err == nil && hash != rs.Hash():
-			return fmt.Errorf("%w: %s", ErrRuleSetChanged, rs.Key())
-		case err == nil:
-			continue
-		case !errors.Is(err, pgx.ErrNoRows):
-			return err
-		}
-		body, _ := json.Marshal(rs)
-		if err := s.q.InsertRuleSet(ctx, db.InsertRuleSetParams{
-			ID: rs.ID, Version: rs.Version, ContentHash: rs.Hash(), Body: body, CreatedAt: s.now(),
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Facts is a stored fixture_facts row.
 type Facts struct {
 	ID            int64
@@ -226,7 +200,7 @@ func (s *Store) LatestFacts(ctx context.Context, fixtureID uuid.UUID) (Facts, er
 type RunInput struct {
 	FixtureID  uuid.UUID
 	FactsID    int64
-	RuleSet    *rules.RuleSet
+	Settings   *settings.Settings
 	VotoSource string
 	InputHash  string // identifies all inputs; equal hashes mean an identical result
 	Reason     string
@@ -234,18 +208,18 @@ type RunInput struct {
 }
 
 // RecordRun stores a computation and makes it current, unless the current run
-// for the same fixture, rule set family and voto source has the same input
+// for the same fixture, settings and voto source has the same input
 // hash. It returns the current run ID and whether a new run was created.
 func (s *Store) RecordRun(ctx context.Context, in RunInput) (uuid.UUID, bool, error) {
 	var runID uuid.UUID
 	var created bool
 	err := s.Tx(ctx, func(q *db.Queries) error {
-		key := in.FixtureID.String() + "|" + in.RuleSet.ID + "|" + in.VotoSource
+		key := in.FixtureID.String() + "|" + in.Settings.SHA256 + "|" + in.VotoSource
 		if err := q.LockComputation(ctx, key); err != nil {
 			return err
 		}
 		var supersedes *uuid.UUID
-		cur, err := q.CurrentRun(ctx, db.CurrentRunParams{FixtureID: in.FixtureID, RuleSetID: in.RuleSet.ID, VotoSource: in.VotoSource})
+		cur, err := q.CurrentRun(ctx, db.CurrentRunParams{FixtureID: in.FixtureID, SettingsSha256: in.Settings.SHA256, VotoSource: in.VotoSource})
 		switch {
 		case err == nil && cur.InputHash == in.InputHash:
 			runID = cur.ID
@@ -261,7 +235,7 @@ func (s *Store) RecordRun(ctx context.Context, in RunInput) (uuid.UUID, bool, er
 		}
 		if err := q.InsertRun(ctx, db.InsertRunParams{
 			ID: runID, FixtureID: in.FixtureID, FixtureFactsID: in.FactsID,
-			RuleSetID: in.RuleSet.ID, RuleSetVersion: in.RuleSet.Version, VotoSource: in.VotoSource,
+			SettingsSha256: in.Settings.SHA256, VotoSource: in.VotoSource,
 			EngineVersion: engine.Version, InputHash: in.InputHash, SupersedesRunID: supersedes,
 			Reason: in.Reason, CreatedAt: s.now(),
 		}); err != nil {
@@ -276,7 +250,7 @@ func (s *Store) RecordRun(ctx context.Context, in RunInput) (uuid.UUID, bool, er
 		}
 		created = true
 		return q.SetCurrentRun(ctx, db.SetCurrentRunParams{
-			FixtureID: in.FixtureID, RuleSetID: in.RuleSet.ID, VotoSource: in.VotoSource, RunID: runID,
+			FixtureID: in.FixtureID, SettingsSha256: in.Settings.SHA256, VotoSource: in.VotoSource, RunID: runID,
 		})
 	})
 	return runID, created, err

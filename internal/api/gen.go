@@ -44,7 +44,7 @@ func (e ScoreRole) Valid() bool {
 
 // BreakdownItem defines model for BreakdownItem.
 type BreakdownItem struct {
-	// Code A rule set scoring key
+	// Code A scoring code
 	//
 	// Example: goal
 	Code  string `json:"code"`
@@ -122,25 +122,6 @@ type Ref struct {
 	Name string `json:"name"`
 }
 
-// RuleSet defines model for RuleSet.
-type RuleSet struct {
-	// Body The rule set as published; see rulesets/schema.json. Point values are integer hundredths.
-	Body        map[string]interface{} `json:"body"`
-	ContentHash string                 `json:"content_hash"`
-	Id          string                 `json:"id"`
-	PublishedAt time.Time              `json:"published_at"`
-	Version     string                 `json:"version"`
-}
-
-// RuleSetSummary defines model for RuleSetSummary.
-type RuleSetSummary struct {
-	ContentHash string    `json:"content_hash"`
-	Id          string    `json:"id"`
-	Name        string    `json:"name"`
-	PublishedAt time.Time `json:"published_at"`
-	Version     string    `json:"version"`
-}
-
 // Run defines model for Run.
 type Run struct {
 	CreatedAt      time.Time `json:"created_at"`
@@ -149,8 +130,7 @@ type Run struct {
 	Id             string    `json:"id"`
 	InputHash      string    `json:"input_hash"`
 	Reason         string    `json:"reason"`
-	Ruleset        string    `json:"ruleset"`
-	RulesetVersion string    `json:"ruleset_version"`
+	SettingsSha256 string    `json:"settings_sha256"`
 	Supersedes     *string   `json:"supersedes,omitempty"`
 	VotoSource     string    `json:"voto_source"`
 }
@@ -159,8 +139,7 @@ type Run struct {
 type RunRef struct {
 	ComputedAt     time.Time `json:"computed_at"`
 	Id             string    `json:"id"`
-	Ruleset        string    `json:"ruleset"`
-	RulesetVersion string    `json:"ruleset_version"`
+	SettingsSha256 string    `json:"settings_sha256"`
 	VotoSource     string    `json:"voto_source"`
 }
 
@@ -194,9 +173,9 @@ type ScoreRole string
 
 // ScoreList defines model for ScoreList.
 type ScoreList struct {
-	Ruleset    string  `json:"ruleset"`
-	Scores     []Score `json:"scores"`
-	VotoSource string  `json:"voto_source"`
+	Scores         []Score `json:"scores"`
+	SettingsSha256 string  `json:"settings_sha256"`
+	VotoSource     string  `json:"voto_source"`
 }
 
 // Season defines model for Season.
@@ -212,14 +191,20 @@ type Season struct {
 	Name string `json:"name"`
 }
 
+// Settings defines model for Settings.
+type Settings struct {
+	// Body The settings document; see internal/settings/schema/v1.json. Point values are integer hundredths.
+	Body map[string]interface{} `json:"body"`
+
+	// Sha256 sha256 of the canonical JSON of body
+	Sha256 string `json:"sha256"`
+}
+
 // FixtureId defines model for FixtureId.
 type FixtureId = openapi_types.UUID
 
 // PlayerId defines model for PlayerId.
 type PlayerId = openapi_types.UUID
-
-// RuleSetQuery defines model for RuleSetQuery.
-type RuleSetQuery = string
 
 // SeasonId defines model for SeasonId.
 type SeasonId = openapi_types.UUID
@@ -229,27 +214,18 @@ type VotoSourceQuery = string
 
 // GetFixtureScoresParams defines parameters for GetFixtureScores.
 type GetFixtureScoresParams struct {
-	// Ruleset Rule set family. The latest computed version is served.
-	Ruleset *RuleSetQuery `form:"ruleset,omitempty" json:"ruleset,omitempty"`
-
 	// VotoSource Where base voti come from.
 	VotoSource *VotoSourceQuery `form:"voto_source,omitempty" json:"voto_source,omitempty"`
 }
 
 // GetMatchdayScoresParams defines parameters for GetMatchdayScores.
 type GetMatchdayScoresParams struct {
-	// Ruleset Rule set family. The latest computed version is served.
-	Ruleset *RuleSetQuery `form:"ruleset,omitempty" json:"ruleset,omitempty"`
-
 	// VotoSource Where base voti come from.
 	VotoSource *VotoSourceQuery `form:"voto_source,omitempty" json:"voto_source,omitempty"`
 }
 
 // GetPlayerSeasonScoresParams defines parameters for GetPlayerSeasonScores.
 type GetPlayerSeasonScoresParams struct {
-	// Ruleset Rule set family. The latest computed version is served.
-	Ruleset *RuleSetQuery `form:"ruleset,omitempty" json:"ruleset,omitempty"`
-
 	// VotoSource Where base voti come from.
 	VotoSource *VotoSourceQuery `form:"voto_source,omitempty" json:"voto_source,omitempty"`
 }
@@ -271,12 +247,6 @@ type ServerInterface interface {
 	// GetPlayer Get a player
 	// (GET /v1/players/{playerId})
 	GetPlayer(w http.ResponseWriter, r *http.Request, playerId PlayerId)
-	// ListRuleSets List every published rule set version
-	// (GET /v1/rulesets)
-	ListRuleSets(w http.ResponseWriter, r *http.Request)
-	// GetRuleSet Get one rule set version, as published
-	// (GET /v1/rulesets/{rulesetId}/versions/{version})
-	GetRuleSet(w http.ResponseWriter, r *http.Request, rulesetId string, version string)
 	// ListSeasons List seasons
 	// (GET /v1/seasons)
 	ListSeasons(w http.ResponseWriter, r *http.Request)
@@ -289,6 +259,9 @@ type ServerInterface interface {
 	// GetPlayerSeasonScores A player's voti and fantavoti across a season
 	// (GET /v1/seasons/{seasonId}/players/{playerId}/scores)
 	GetPlayerSeasonScores(w http.ResponseWriter, r *http.Request, seasonId SeasonId, playerId PlayerId, params GetPlayerSeasonScoresParams)
+	// GetDefaultSettings Get the default league settings document (Classic)
+	// (GET /v1/settings/default)
+	GetDefaultSettings(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -372,19 +345,6 @@ func (siw *ServerInterfaceWrapper) GetFixtureScores(w http.ResponseWriter, r *ht
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetFixtureScoresParams
 
-	// ------------- Optional query parameter "ruleset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "ruleset", r.URL.Query(), &params.Ruleset, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "ruleset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleset", Err: err})
-		}
-		return
-	}
-
 	// ------------- Optional query parameter "voto_source" -------------
 
 	err = runtime.BindQueryParameterWithOptions("form", true, false, "voto_source", r.URL.Query(), &params.VotoSource, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
@@ -426,55 +386,6 @@ func (siw *ServerInterfaceWrapper) GetPlayer(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetPlayer(w, r, playerId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListRuleSets operation middleware
-func (siw *ServerInterfaceWrapper) ListRuleSets(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRuleSets(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetRuleSet operation middleware
-func (siw *ServerInterfaceWrapper) GetRuleSet(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "rulesetId" -------------
-	var rulesetId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "rulesetId", r.PathValue("rulesetId"), &rulesetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "rulesetId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "version" -------------
-	var version string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRuleSet(w, r, rulesetId, version)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -551,19 +462,6 @@ func (siw *ServerInterfaceWrapper) GetMatchdayScores(w http.ResponseWriter, r *h
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetMatchdayScoresParams
 
-	// ------------- Optional query parameter "ruleset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "ruleset", r.URL.Query(), &params.Ruleset, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "ruleset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleset", Err: err})
-		}
-		return
-	}
-
 	// ------------- Optional query parameter "voto_source" -------------
 
 	err = runtime.BindQueryParameterWithOptions("form", true, false, "voto_source", r.URL.Query(), &params.VotoSource, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
@@ -615,19 +513,6 @@ func (siw *ServerInterfaceWrapper) GetPlayerSeasonScores(w http.ResponseWriter, 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetPlayerSeasonScoresParams
 
-	// ------------- Optional query parameter "ruleset" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "ruleset", r.URL.Query(), &params.Ruleset, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "ruleset"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleset", Err: err})
-		}
-		return
-	}
-
 	// ------------- Optional query parameter "voto_source" -------------
 
 	err = runtime.BindQueryParameterWithOptions("form", true, false, "voto_source", r.URL.Query(), &params.VotoSource, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
@@ -643,6 +528,20 @@ func (siw *ServerInterfaceWrapper) GetPlayerSeasonScores(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetPlayerSeasonScores(w, r, seasonId, playerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDefaultSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetDefaultSettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDefaultSettings(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -774,8 +673,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.GetReady)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/rulesets", wrapper.ListRuleSets)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/rulesets/{rulesetId}/versions/{version}", wrapper.GetRuleSet)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/settings/default", wrapper.GetDefaultSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/seasons", wrapper.ListSeasons)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/seasons/{seasonId}/matchdays", wrapper.ListMatchdays)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/seasons/{seasonId}/matchdays/{number}/scores", wrapper.GetMatchdayScores)
@@ -1007,68 +905,6 @@ func (response GetPlayer404ApplicationProblemPlusJSONResponse) VisitGetPlayerRes
 	return err
 }
 
-type ListRuleSetsRequestObject struct {
-}
-
-type ListRuleSetsResponseObject interface {
-	VisitListRuleSetsResponse(w http.ResponseWriter) error
-}
-
-type ListRuleSets200JSONResponse struct {
-	Rulesets []RuleSetSummary `json:"rulesets"`
-}
-
-func (response ListRuleSets200JSONResponse) VisitListRuleSetsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetRuleSetRequestObject struct {
-	RulesetId string `json:"rulesetId"`
-	Version   string `json:"version"`
-}
-
-type GetRuleSetResponseObject interface {
-	VisitGetRuleSetResponse(w http.ResponseWriter) error
-}
-
-type GetRuleSet200JSONResponse RuleSet
-
-func (response GetRuleSet200JSONResponse) VisitGetRuleSetResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetRuleSet404ApplicationProblemPlusJSONResponse struct {
-	ProblemApplicationProblemPlusJSONResponse
-}
-
-func (response GetRuleSet404ApplicationProblemPlusJSONResponse) VisitGetRuleSetResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(404)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 type ListSeasonsRequestObject struct {
 }
 
@@ -1255,6 +1091,27 @@ func (response GetPlayerSeasonScores404ApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type GetDefaultSettingsRequestObject struct {
+}
+
+type GetDefaultSettingsResponseObject interface {
+	VisitGetDefaultSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetDefaultSettings200JSONResponse Settings
+
+func (response GetDefaultSettings200JSONResponse) VisitGetDefaultSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetHealth Liveness probe
@@ -1272,12 +1129,6 @@ type StrictServerInterface interface {
 	// GetPlayer Get a player
 	// (GET /v1/players/{playerId})
 	GetPlayer(ctx context.Context, request GetPlayerRequestObject) (GetPlayerResponseObject, error)
-	// ListRuleSets List every published rule set version
-	// (GET /v1/rulesets)
-	ListRuleSets(ctx context.Context, request ListRuleSetsRequestObject) (ListRuleSetsResponseObject, error)
-	// GetRuleSet Get one rule set version, as published
-	// (GET /v1/rulesets/{rulesetId}/versions/{version})
-	GetRuleSet(ctx context.Context, request GetRuleSetRequestObject) (GetRuleSetResponseObject, error)
 	// ListSeasons List seasons
 	// (GET /v1/seasons)
 	ListSeasons(ctx context.Context, request ListSeasonsRequestObject) (ListSeasonsResponseObject, error)
@@ -1290,6 +1141,9 @@ type StrictServerInterface interface {
 	// GetPlayerSeasonScores A player's voti and fantavoti across a season
 	// (GET /v1/seasons/{seasonId}/players/{playerId}/scores)
 	GetPlayerSeasonScores(ctx context.Context, request GetPlayerSeasonScoresRequestObject) (GetPlayerSeasonScoresResponseObject, error)
+	// GetDefaultSettings Get the default league settings document (Classic)
+	// (GET /v1/settings/default)
+	GetDefaultSettings(ctx context.Context, request GetDefaultSettingsRequestObject) (GetDefaultSettingsResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1458,57 +1312,6 @@ func (sh *strictHandler) GetPlayer(w http.ResponseWriter, r *http.Request, playe
 	}
 }
 
-// ListRuleSets operation middleware
-func (sh *strictHandler) ListRuleSets(w http.ResponseWriter, r *http.Request) {
-	var request ListRuleSetsRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListRuleSets(ctx, request.(ListRuleSetsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListRuleSets")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListRuleSetsResponseObject); ok {
-		if err := validResponse.VisitListRuleSetsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetRuleSet operation middleware
-func (sh *strictHandler) GetRuleSet(w http.ResponseWriter, r *http.Request, rulesetId string, version string) {
-	var request GetRuleSetRequestObject
-
-	request.RulesetId = rulesetId
-	request.Version = version
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetRuleSet(ctx, request.(GetRuleSetRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetRuleSet")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetRuleSetResponseObject); ok {
-		if err := validResponse.VisitGetRuleSetResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // ListSeasons operation middleware
 func (sh *strictHandler) ListSeasons(w http.ResponseWriter, r *http.Request) {
 	var request ListSeasonsRequestObject
@@ -1615,57 +1418,80 @@ func (sh *strictHandler) GetPlayerSeasonScores(w http.ResponseWriter, r *http.Re
 	}
 }
 
+// GetDefaultSettings operation middleware
+func (sh *strictHandler) GetDefaultSettings(w http.ResponseWriter, r *http.Request) {
+	var request GetDefaultSettingsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDefaultSettings(ctx, request.(GetDefaultSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDefaultSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDefaultSettingsResponseObject); ok {
+		if err := validResponse.VisitGetDefaultSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"5FpZk9s28v8qXfynKonDoRTbuZSHfzmHvVOVY9bjZB8y3hFEtkRkSIABQMnK1Hz3rQbAQ+Ihjj3x1lbe",
-	"KBHs49cHuhu4DWKZF1KgMDpY3AYFUyxHg8r+es7fmFLheUI/uAgWQcFMGoSBYDkGi2Bdvw8DhX+UXGES",
-	"LIwqMQx0nGLO6MO1VDkzwSIoS04rzb6gj7VRXGyCu7swuMjYHtUgm6J6/W5cXpYZXqL5Z4lqT18kqGPF",
-	"C8MlsaS3oNHAmuU820fwKkXImEFtgDAqDSawRaW5FMA1aFRbTKIgdBL/YanWIqsyQ40maEuY4JqVGYkY",
-	"Z0xrHvdKeYlMSzGIha5evxsWv0ojL2WpYhyA418pKoQV0whbaThBgLBWMh/SeCuNvNaW5IDWhZJbnqA6",
-	"U8yQHF257kgpXUih0frfhZKrDHN6jKUwKAw9sqLIeMxI0FnhVnzyuyapb1t8P1C4DhbB/80aB5+5t3pW",
-	"0bUcD/V+JgCVkioEpuHl82/hq6effQGeDSRoGM90ZDH01IjZNwrZTSJ34tw4cQslC1SGOz1imWAX4meg",
-	"Kp/TsSQI4AYJUXzD8iIjZDaSZV2cwiCWpcMi54LnZR4sPq1XcWFwg4qWFZL7uB5D4zuMec6ywMFf+dRv",
-	"TuqKV03sdc1Irn7H2BCfisLitiX759GTL+kzZgwq0vffZ///2/zsq9efXF1F9uH28d0Hfdr5tNPFke3Y",
-	"/pQ2L3FNNFKZ48Sl3MZaR4obHt/I9fognhJm8MzwnHARZZaxFanqwq9DIGcmThMncdc22jBT6q5XXPgo",
-	"AbcgBIw2ETx/1RvGbXPZSK951gw8FKEDr896/0CWmbSLdiNhY1R5c1IO/1kfpx9biBzy8juJfeYG85NO",
-	"W/nIXc2GKcX29FuU+QpVH+pHkvqFYcO9T2i3OVnRLw0zui9XMgMmRXAbFSQ8AS7sP9YeNpckqPgWE5tD",
-	"oUqFgFvSKoLLVEpzJkujQeAWFdioo1x7FAFac+1kqEN/3hf6lDl6RH1Bf9t0g0kI+CbOyoQST4GCZZZJ",
-	"OIXwdSxFjAkmQxwaND7UYJDlUH0Bu5Rn2IZrxzRIB1fBLVxyJ8DyAS5IQkxOiiV34rrWeXxpret1zrXu",
-	"0+GiWgGG3aAAJhIQ0tS4OakIN5NKjaAZWXa1tzrcIBbWq6ZKYb8eE8IusE5E9EnL+/Owkp/GRqMw1z7r",
-	"HYpzicKAXK9JTQbaKMY3qQGFCUhF/2AsRQJ7zDK5a5LESsoMmSDa7tV1zFTS45nnztK6h9SYyEch7Vyg",
-	"R/Mes3dt0HajsI61I8lbIHWioTd/NEXMYSy7YqJ372lSb9dEhpsMe79yf7TTNVvJ0ixWGROn87Z9W5EP",
-	"x9I47ZsdbQZ2UVcd3k7Zu+zSXn6ucO/yXMnE7iUsSTi5EcsuWu/dtnzoZVTU11UX01CUq4zrFJOvQaN7",
-	"pbHeZiIqKyO4oMoHtiwryT0VgrcGpKVIFCYm1VHQI7evWa9TptNecAYwq4W6Zmaw/Oh85XuTiWBXq4+k",
-	"PGIeOohHjHJZ5jlT+76a9+2UH3CY942KFWMcnH5URA8UCpm5p9xxqZTvd7qZFMWGC7we1m0QXS6KcsQm",
-	"ynaX/a98RzvyblQgXRaoNCYOkpPFc7udnGa7puU+Fic8ak6P4DtApcYgbJutsceA0XtTYjU2uJfhBwz3",
-	"rvD/lXi29ezD55K24J7sXTXNk4v+wza7p/RfM2EYCWd3hSz7eR0sfpvY/b4+3iuIDhRZ6couXeYg1/ax",
-	"FvxrID+GXYoCNIo/GdA3Uac5vKtbjOsB8473ijkXpcGBesBV0RN7XSVd7YCC6ilXL9XFpCzNmmPWLmPa",
-	"TiZO8nBx4MrIP9l1ZYhuAtNVIzU6pTluvMjgyPKJqj6UG3zjZ2DyHta28VGu1zzmslvqUhFinYs6H6oy",
-	"N8K1D6xF19YiPXX0Uah663tkDvzsYBpgDd94koenHTEHVjtSobJY2Apa5xKD8f4D1z0V21gas5X69AmA",
-	"yyo9SeBeqa7JcscDTDk0ELisN8luukfDDe9/WQqj9g9QCQ2WzmHNpE/qE0yanuHx/PHns8fzx19MmzjV",
-	"rBvlu+zvbOmx7omFl8iSMymyPbA4Rq3BSLA+GbMs5tINn6n/rhyVN9P41R5+LlA8pzfRlbgS30qxRUGU",
-	"9eJKnMH5d65elwX7o0Rwamj46Jdfzr/TH0fwkx21KMz2fgDBFS0qYwqhiChYJ9Pw0ZK8YxnCso6XZdjs",
-	"A7B0w9Hlx5bdo0eJyyY1xx03KeAbFptsD2YnrwTAWrHYNS2Q8A03+tGjEHQZp9SXLK/s/PQqWFJ3vbwK",
-	"vojm86tgGYKWICTEGad+3MpfMKVt37zOJDMR0XbiAveDmGra5AbvUAolS5FQ02Mf6D9OBDJkm9L2RrTO",
-	"AlAfi6xkwn37o9CUilJWu4FaQNFuk4w9Pxholojw90pJpaHU2IzZl0Oj/aWTpTobgJgptQcmYPn9K7ZZ",
-	"UvMmElier89+kgLP7J6xJFfaoIHlk/lT+Eka+FEmfM0xIWpBGGQ8RqGt9/szjGcvLn44exLNgzAoVRYs",
-	"gtSYQi9ms91uF21EGUm1mfnP9IxtioxWR6nJs1ZnHtROCc8uzltdxSKYR59GczuuKlCwggeLgAg8cXPy",
-	"1GaKWWrnsX/S88alSkokFpTzJFgEL9D4ke3Rccnj+XzkqOR+RySeQ88JySvnUTZYuYay8KchVSMY/MC3",
-	"KOgtWdBuYWyjKV84xYLXtHymkCX7USUpNez/Ozpa1uQ/9pQPjGK0EUZkuc/mT4bo1oK2DpjawBBV3iAD",
-	"H8UpxjcuRhNm2Ipp/HgIr+2ns2pMPbutD17vZqoUegxFPyh/ScvCg/PdgYqoWTJrzn+pLHonO/SO++8x",
-	"5K/UnFQaUBfeKQyONq9KBE+6f886PiIWOgSZJagNrLnSxnrEUwfFRI+g9U/f1oOelQk35I48o2aE0v/e",
-	"74cWePqTQaNa5UlVNTPqSU39dcKX3Kb4Lt4Unlx8cFg/Yf3xgfY7O+zJ0tMWuD1e4ksGqRJU/lQAWW5r",
-	"GH/gQbvN+/acX7t11Foq70FeronO41br2W11L+NuzGcuqgblfs5SXwn5Sw1pW8WBLc4K8L7N9AINMGia",
-	"Om+CmBmWyU1jg2pQPYg8eaePIR08aO5us56YjQ8mxacSc01/Wkp25Snl5SbgeEJ7qnDFqVMLDLdBd1Sp",
-	"aFOFQFXHNscDzbirMkMj2rEdZrf+iRKp/1DPbv3TaIBUpxudCOm5/VMzGb3+0+naemk16k2n9JfGosdh",
-	"IB4rs0QPEGFSYMfM4UE3M2p0dwdrPPYu/ZoHDb0W42kjEjepOBVxFdkpAef1ch0tFxvU1IlT9dobXLqG",
-	"YTCV+SWz2+pq292smluNQ/xjveq+m0t9x+6By9oDuSdZqL4R0zPH0vWcaYqNe23amgFOM2+NKXDhMur7",
-	"3gGt2zDvOB9qqOV31Ut1U+ctHWp26y79TKl2KyzestxtnKw//9a3j4bT79jtvr9BDX2wp3vLg7+WF/5v",
-	"VdWtSfxQWd3jtt1Ke4LbusrZed9DuO7kQv3v1dRVFn3vI4DmXl3PbJzFSmpd589ed7Nbi9pWvtBMOhez",
-	"WSZjlqVSm8WX8y/nFnBPoB6S+qkUma+6k+5It/6pcnLrr7qMunt9958AAAD//w==",
+	"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",
+	"/wYAAP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

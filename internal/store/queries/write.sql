@@ -58,27 +58,20 @@ RETURNING id;
 -- name: LatestFixtureFacts :one
 SELECT * FROM fixture_facts WHERE fixture_id = $1 ORDER BY id DESC LIMIT 1;
 
--- name: GetRuleSetHash :one
-SELECT content_hash FROM rule_sets WHERE id = $1 AND version = $2;
-
--- name: InsertRuleSet :exec
-INSERT INTO rule_sets (id, version, content_hash, body, created_at) VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (id, version) DO NOTHING;
-
 -- name: LockComputation :exec
--- Serializes run recording per (fixture, rule set, voto source) for the transaction.
+-- Serializes run recording per (fixture, settings, voto source) for the transaction.
 SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(key)::text, 0));
 
 -- name: CurrentRun :one
 SELECT r.id, r.input_hash FROM current_runs cr
 JOIN computation_runs r ON r.id = cr.run_id
-WHERE cr.fixture_id = $1 AND cr.rule_set_id = $2 AND cr.voto_source = $3;
+WHERE cr.fixture_id = $1 AND cr.settings_sha256 = $2 AND cr.voto_source = $3;
 
 -- name: InsertRun :exec
 INSERT INTO computation_runs (
-    id, fixture_id, fixture_facts_id, rule_set_id, rule_set_version, voto_source,
+    id, fixture_id, fixture_facts_id, settings_sha256, voto_source,
     engine_version, input_hash, supersedes_run_id, reason, created_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
 
 -- name: InsertPlayerScores :copyfrom
 INSERT INTO player_scores (
@@ -88,8 +81,8 @@ INSERT INTO player_scores (
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19);
 
 -- name: SetCurrentRun :exec
-INSERT INTO current_runs (fixture_id, rule_set_id, voto_source, run_id) VALUES ($1, $2, $3, $4)
-ON CONFLICT (fixture_id, rule_set_id, voto_source) DO UPDATE SET run_id = EXCLUDED.run_id;
+INSERT INTO current_runs (fixture_id, settings_sha256, voto_source, run_id) VALUES ($1, $2, $3, $4)
+ON CONFLICT (fixture_id, settings_sha256, voto_source) DO UPDATE SET run_id = EXCLUDED.run_id;
 
 -- name: GetRawPayload :one
 SELECT * FROM raw_payloads WHERE id = $1;
