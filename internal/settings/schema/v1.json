@@ -25,6 +25,21 @@
       },
       "additionalProperties": false
     },
+    "team": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "cel"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "type": { "const": "expr.cel/1" },
+          "stage": { "const": "team" },
+          "cel": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "description": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
     "player": {
       "type": "object",
       "required": ["events"],
