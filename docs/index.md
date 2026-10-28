@@ -14,12 +14,12 @@ hero:
 ---
 
 OpenFanta ingests raw football data from a third-party provider, computes **voti** and
-**fantavoti** from rule sets defined as data, and serves them over a read-only HTTP API that any
+**fantavoti** from league settings defined as data, and serves them over a read-only HTTP API that any
 client can consume.
 
 ```
 provider (HTTP, cache, rate limit) → raw_payloads → parser → MatchFacts
-    → timeline → engine (+ rule set, + voti) → versioned runs → REST API
+    → timeline → engine (+ settings, + voti) → versioned runs → REST API
 ```
 
 The first version covers the Classic rules, one provider (Sportmonks), Postgres storage with

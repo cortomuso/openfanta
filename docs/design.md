@@ -14,7 +14,7 @@ description: "Architecture, decisions, data model, scoring semantics and the lea
                                                 ▼
                                          MatchFacts (provider-agnostic)
                                                 │  + VotoSource (voti)
-                                                │  + RuleSet (data)
+                                                │  + Settings (data)
                                                 ▼
                                        engine.Compute (pure)
                                                 ▼
@@ -22,7 +22,7 @@ description: "Architecture, decisions, data model, scoring semantics and the lea
                                                 ▼
                                     REST API /v1 (read-only, OpenAPI 3.1)
 ```
-- **Pure core**: `timeline`, `engine`, `rules` and the normalizers do no I/O. They take values in and return values out, and each is tested by table tests and golden files.
+- **Pure core**: `timeline`, `engine`, `settings` and the normalizers do no I/O. They take values in and return values out, and each is tested by table tests and golden files.
 - **Imperative shell**: the provider HTTP client, the store, the ingest orchestration and the API.
 - **Single binary** with subcommands: `openfanta serve | ingest | recompute | migrate`.
 
@@ -57,11 +57,12 @@ JSONB for raw payloads and breakdowns, a single SQL dialect, and concurrent inge
 > **Implemented parts: the code is the source of truth.** The sections below give the reasoning
 > and point to the code; they deliberately don't restate behaviour that lives there.
 
-### 2.4 Rule sets (interim scorer)
-Bonus/malus values are data, not code, in integer hundredths so results are deterministic. A
-published `id@version` is immutable. This format is the **interim** Classic scorer and will be
-replaced by the per-league settings in §9 (the engine is generalized, not removed).
-Code: `rulesets/schema.json`, `rulesets/classic.yaml`, `internal/rules/`, `internal/engine/`.
+### 2.4 League settings (default only so far)
+Bonus/malus values are data, not code, in integer hundredths so results are deterministic. They
+live in the league settings document of §9. Until leagues score under their own settings, ingest
+scores every fixture under the Classic default, and each run records the sha256 of the document
+that produced it.
+Code: `internal/settings/` (`classic.json`, `schema/v1.json`), `internal/engine/`.
 
 ### 2.5 Versioning and audit
 Raw payloads are append-only, normalized facts and computation runs are immutable, and a run is
@@ -123,9 +124,11 @@ graceful shutdown: `serve` in `cmd/openfanta/main.go`. Upstream retries, backoff
 - **Privacy:** store only the identity reference and a display name. On account deletion, pseudonymize the user ("deleted user", opaque ID), so the audit log stays intact.
 - **Write API conventions:** `ETag` + `If-Match` for optimistic concurrency (a stale save gets `412`); an `Idempotency-Key` header so retried actions (a line-up submission, a trade acceptance) are not applied twice; `application/problem+json` errors.
 
-## 9. League settings format (design, not built yet)
+## 9. League settings format (partly built)
 
 Research behind this section: [league settings research](research/league-settings/report.md).
+
+**Built (#3):** the document schema and validation, canonical JSON and its hash, the structured diff, the Classic default, and the hash-chained `settings_versions` history with the closed-matchday check. See [League settings](settings.md) for where each lives. The rest of this section describes what is still to build: the scoring stages beyond 1, CEL, recompute and the member-visible diffs.
 
 **Finding:** fantacalcio rules vary widely but shallowly. Almost every rule is one of a few shapes with parameters: per-event values with per-role overrides, band tables (modificatore difesa, captain), goal-threshold lists (fasce gol), zero-sum duels (modificatore centrocampo), score corrections, ordered tie-breakers. Substitution logic (Classic modes, Mantra Basic/Easy/Master) is algorithmic: it lives in engine code and leagues select it by name.
 
@@ -143,15 +146,15 @@ Research behind this section: [league settings research](research/league-setting
 Roster and market rules (quotas, budget, auction type) only validate actions; they never affect scores, and they version separately from scoring.
 
 **Document rules:**
-- `schema` versions the document shape: additive within a major version, new fields have defaults that keep the old meaning, and names are never reused.
-- `engine` versions the semantics (tie-breaks, substitution algorithms, the expression environment) and is pinned per settings version, so an engine bug fix never silently changes old results. Adopting a new engine is an explicit, logged settings change.
-- `requires` lists the features a document uses; a server that lacks one rejects the document instead of misreading it.
+- `schema` versions the document shape: additive within a major version, new fields have defaults that keep the old meaning, and names are never reused. Schema 1.0 covers the player stage only; `lineup`, `team`, `match`, `competitions` and `roster` arrive as additive minors with their stages.
+- `engine` versions the semantics (tie-breaks, substitution algorithms, the expression environment) and is pinned per settings version, so an engine bug fix never silently changes old results. Adopting a new engine is an explicit, logged settings change. Today `settings.Engines` lists the one engine this build runs.
+- `requires` lists the features a document uses; a server that lacks one rejects the document instead of misreading it (`settings.Features`).
 - Unknown keys inside scoring modules are rejected. Client UI data goes in `meta` / `x-*`, which the engine ignores and preserves verbatim. The server stores the canonical submitted JSON, not a re-marshalled struct.
 - A **CEL** expression module (`expr.cel/1`, in v1) is the escape hatch for custom rules: integer-only results, type-checked at submission, cost-limited, in a frozen environment pinned by `engine`. A document that uses it lists it in `requires`.
 
 **Determinism rules:** all values are integer hundredths; band checks compare sums (`sum ≥ from × n`) and never divide; bands use ascending lower bounds only; every "best N" selection names a tie-break; voto and fantavoto rounding (mode and step) is an explicit league setting.
 
-**Versioning and audit:** settings are stored in append-only `settings_versions` (league, seq, canonical JSON, sha256, prev_sha256, schema, engine, effective_from_matchday, author, reason). They are hash-chained, so a client that caches the head hash can detect rewritten history; for v1 that is the only tamper evidence (signed exports may follow). An engine version stays executable while any non-archived season pins it. Results are immutable rows keyed by (settings hash, input snapshot hash, engine version). Every result carries an explain trace (which module added how many hundredths), and every recompute publishes a member-visible diff. Stage-1 fantavoti can be computed once and shared across leagues with identical player settings and inputs; the efficiency gain must be benchmarked before relying on it.
+**Versioning and audit:** settings are stored in append-only `settings_versions`, hash-chained, so a client that caches the head hash can detect rewritten history; for v1 that is the only tamper evidence (signed exports may follow). Built; see `internal/store/settings.go`. An engine version stays executable while any non-archived season pins it. Results are immutable rows keyed by (settings hash, input snapshot hash, engine version). Every result carries an explain trace (which module added how many hundredths), and every recompute publishes a member-visible diff. Stage-1 fantavoti can be computed once and shared across leagues with identical player settings and inputs; the efficiency gain must be benchmarked before relying on it.
 
 A full example document (a Classic league, and how Mantra fits the same structure) is in the research report.
 
@@ -170,3 +173,4 @@ A full example document (a Classic league, and how Mantra fits the same structur
 - **2026-10-27: snapshots copy** ratings, events, line-ups and the settings version rather than referencing provider data (#1).
 - **2026-10-27: tamper evidence** is the settings hash chain for v1; signed exports and Merkle logs are deferred (#1).
 - **2026-10-27: identity:** OIDC with Google, Apple and operator-configured issuers; no email magic links (#1).
+- **2026-10-28: settings v1 replaces the interim rule sets (#3).** Runs are keyed by the sha256 of the settings that scored them, not by a rule set id and version, and the `/v1/rulesets` endpoints are gone. Ingest scores under the Classic default until per-league scoring (stage 1) exists, so a changed default adds a run under a new hash instead of superseding the old one. `matchdays.closed_at` is a plain column for now; automatic closing comes with the league features.

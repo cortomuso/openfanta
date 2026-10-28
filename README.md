@@ -1,7 +1,7 @@
 # OpenFanta
 
 OpenFanta is an open fantacalcio data framework. It ingests raw football data from a
-third-party provider, computes **voti** and **fantavoti** from rule sets defined as data, and
+third-party provider, computes **voti** and **fantavoti** from league settings defined as data, and
 serves them over a read-only HTTP API that any client can consume.
 
 This first version covers the Fantavoti engine with **Classic** rules, one provider
@@ -10,7 +10,7 @@ Architecture and decisions: [docs/design.md](docs/design.md).
 
 ```
 provider (HTTP, cache, rate limit) → raw_payloads → parser → MatchFacts
-    → timeline → engine (+ rule set, + voti) → versioned runs → REST API
+    → timeline → engine (+ settings, + voti) → versioned runs → REST API
 ```
 
 
@@ -36,7 +36,7 @@ Running the server, configuration and the CLI are covered in [Getting started](d
 |---|---|
 | Run, configure, CLI | [docs/getting-started.md](docs/getting-started.md) |
 | API conventions and spec | [docs/api-overview.md](docs/api-overview.md), [`api/openapi.yaml`](api/openapi.yaml) |
-| Rule set keys, changing values | [docs/rulesets.md](docs/rulesets.md), [docs/guides/changing-ruleset-values.md](docs/guides/changing-ruleset-values.md) |
+| League settings, changing values | [docs/settings.md](docs/settings.md), [docs/guides/changing-default-settings.md](docs/guides/changing-default-settings.md) |
 | Adding a data provider | [docs/guides/adding-a-provider.md](docs/guides/adding-a-provider.md) |
 | Project layout | [docs/project-layout.md](docs/project-layout.md) |
 | Design, decisions, open questions | [docs/design.md](docs/design.md) |

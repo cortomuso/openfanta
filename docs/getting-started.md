@@ -30,7 +30,6 @@ and fill it in.
 | `OPENFANTA_SPORTMONKS_REQUESTS_PER_HOUR` | `1800` | Client-side request budget, kept below the plan limit |
 | `OPENFANTA_HTTP_ADDR` | `:8080` | API listen address |
 | `OPENFANTA_LOG_LEVEL` / `OPENFANTA_LOG_FORMAT` | `info` / `json` | Structured logging (`text` for humans) |
-| `OPENFANTA_RULESETS_DIR` | none | Extra rule set files, merged with the built-in ones |
 | `OPENFANTA_SHUTDOWN_TIMEOUT` | `15s` | How long to drain in-flight requests on SIGTERM |
 | `OPENFANTA_MIGRATE_ON_STARTUP` | `false` | Apply migrations before `serve`/`ingest` |
 
@@ -70,10 +69,10 @@ dozen. Players with only a few minutes may get no rating, and are then *senza vo
 |---|---|
 | `openfanta migrate` | Applies database migrations |
 | `openfanta ingest --season S --matchday N [--refresh]` | Fetches a matchday, stores raw payloads, computes fantavoti for finished fixtures. Finished fixtures are cached forever; `--refresh` re-fetches them to pick up upstream corrections |
-| `openfanta recompute [--reparse] [--season-id UUID] [--reason TEXT]` | Recomputes stored fixtures under the current rule sets with no network access. `--reparse` re-parses stored raw payloads first (after a parser fix) |
-| `openfanta rulesets` | Lists loaded rule sets and their content hashes |
+| `openfanta recompute [--reparse] [--season-id UUID] [--reason TEXT]` | Recomputes stored fixtures under the default settings with no network access. `--reparse` re-parses stored raw payloads first (after a parser fix) |
+| `openfanta settings` | Prints the default league settings document (canonical JSON) |
 | `openfanta serve` | Serves the API |
 
 A recompute whose inputs did not change creates nothing. When something does change (a corrected
-upstream event, a new rule set version, a parser fix), a new **run** supersedes the old one, and
+upstream event, a change to the default settings, a parser fix), a new **run** supersedes the old one, and
 both stay queryable at `GET /v1/fixtures/{id}/runs`.
