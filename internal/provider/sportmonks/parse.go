@@ -15,14 +15,7 @@ import (
 
 // parserVersion must change whenever parsing can produce different output
 // from the same payload.
-const parserVersion = "3"
-
-// assistClassBySubType maps the sub_type_id of a goal or penalty event to the
-// class of its assist. A goal whose sub_type_id is absent or not listed is an
-// open-play assist. UNVERIFIED: no real payload has confirmed which sub types
-// Sportmonks uses for set-piece goals, so this is empty on purpose. Fill it in
-// from a real payload, with a test, and bump parserVersion.
-var assistClassBySubType = map[int]domain.AssistClass{}
+const parserVersion = "2"
 
 // ErrParse wraps every parsing failure.
 var ErrParse = errors.New("sportmonks: cannot parse payload")
@@ -259,7 +252,10 @@ func ParseFixture(r provider.Raw) (provider.Fixture, error) {
 	return out, nil
 }
 
-// convertEvent maps one Sportmonks event to a domain event. keep is false for
+// convertEvent maps one Sportmonks event to a domain event. Every assist is an
+// open-play assist: the sub_type_id of a goal is how it was struck (left foot
+// 1521, right foot 1522, header 1694), not how it was made, and no other
+// structured field tells set pieces apart. keep is false for
 // events that do not matter for fantacalcio or were rescinded (e.g. by VAR).
 func convertEvent(e smEvent, teamOf map[string]domain.TeamID) (domain.Event, bool, error) {
 	if e.Rescinded || e.PlayerID == nil {
@@ -269,10 +265,6 @@ func convertEvent(e smEvent, teamOf map[string]domain.TeamID) (domain.Event, boo
 	player, related := e.PlayerID.String(), ""
 	if e.RelatedPlayerID != nil {
 		related = e.RelatedPlayerID.String()
-	}
-	var class domain.AssistClass
-	if e.SubTypeID != nil && (e.TypeID == eventGoal || e.TypeID == eventPenalty) {
-		class = assistClassBySubType[*e.SubTypeID]
 	}
 	switch e.TypeID {
 	case eventGoal:
@@ -318,7 +310,6 @@ func convertEvent(e smEvent, teamOf map[string]domain.TeamID) (domain.Event, boo
 	return domain.Event{
 		Minute: minute, Kind: kind, Team: team,
 		Player: domain.PlayerID(player), Related: domain.PlayerID(related),
-		AssistClass: class,
 	}, true, nil
 }
 

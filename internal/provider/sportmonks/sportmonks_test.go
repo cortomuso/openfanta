@@ -318,29 +318,20 @@ func TestParseDropsRescindedEvents(t *testing.T) {
 	}
 }
 
-func TestAssistClassMapping(t *testing.T) {
+// Real payloads put the way the goal was struck in sub_type_id (left foot 1521,
+// right foot 1522, header 1694). It says nothing about the assist, so every
+// assist stays open play.
+func TestGoalSubTypesDoNotClassifyAssists(t *testing.T) {
 	const head = `{"data":{"id":1,"participants":[{"id":1,"meta":{"location":"home"}},{"id":2,"meta":{"location":"away"}}],
 		"lineups":[{"player_id":5,"team_id":1,"type_id":11},{"player_id":6,"team_id":1,"type_id":11}],"events":[`
-	parse := func(subType string) d.Event {
-		t.Helper()
-		body := head + `{"id":1,"type_id":14,` + subType + `"player_id":5,"related_player_id":6,"team_id":1,"minute":10}]}}`
+	for _, sub := range []int{1521, 1522, 1694} {
+		body := head + fmt.Sprintf(`{"id":1,"type_id":14,"sub_type_id":%d,"player_id":5,"related_player_id":6,"team_id":1,"minute":10}]}}`, sub)
 		f, err := ParseFixture(provider.Raw{Key: "goal", Body: []byte(body)})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return f.Facts.Events[0]
-	}
-	if got := parse(`"sub_type_id":777,`).AssistClass; got != d.AssistOpenPlay {
-		t.Errorf("unlisted sub type: class %q, want open play", got)
-	}
-	if got := parse("").AssistClass; got != d.AssistOpenPlay {
-		t.Errorf("no sub type: class %q, want open play", got)
-	}
-	// The real mapping is unverified (see assistClassBySubType), so this only
-	// checks the mechanism with an invented sub type.
-	assistClassBySubType[777] = d.AssistSetPiece
-	t.Cleanup(func() { delete(assistClassBySubType, 777) })
-	if got := parse(`"sub_type_id":777,`).AssistClass; got != d.AssistSetPiece {
-		t.Errorf("listed sub type: class %q, want set piece", got)
+		if e := f.Facts.Events[0]; e.Kind != d.EventGoal || e.Related != "6" || e.AssistClass != d.AssistOpenPlay {
+			t.Errorf("sub type %d: event = %+v, want a goal with an open-play assist", sub, e)
+		}
 	}
 }

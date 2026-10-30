@@ -28,7 +28,7 @@ Today the engine understands the per-event values, `player.cards.red_replaces_ye
 `clean_sheet.min_minutes` and `player.senza_voto`. It does not tell defenders, midfielders and
 attackers apart yet, so only a `P` (goalkeeper) entry under `by_role` has an effect.
 
-Assists are scored by class: `assist.open_play` (breakdown code `assist`), `assist.set_piece` (`assist_set_piece`) and `assist.contribution` (`assist_contribution`). A class with no value in the document scores nothing. The provider decides which class an assist belongs to; see the mapping in [`internal/provider/sportmonks/parse.go`](https://github.com/cortomuso/openfanta/blob/main/internal/provider/sportmonks/parse.go). Today every assist is open play, because the Sportmonks sub types for set-piece goals are not verified yet.
+Assists are scored by class: `assist.open_play` (breakdown code `assist`), `assist.set_piece` (`assist_set_piece`) and `assist.contribution` (`assist_contribution`). A class with no value in the document scores nothing. The provider decides which class an assist belongs to. Sportmonks does not say: the `sub_type_id` of a goal is how it was struck (left foot, right foot, header), and no structured field marks a set piece or a contribution. So every Sportmonks assist is open play, and the other two classes stay unused until another source can supply them. The facts model already carries a class on each goal event for that.
 
 The clean-sheet bonus goes to a goalkeeper who played, whose team conceded nothing while they were on the pitch, who has a real voto (not a voto d'ufficio), and who played at least `clean_sheet.min_minutes`.
 
