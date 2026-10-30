@@ -61,6 +61,7 @@ type CurrentScore struct {
 	YellowCards     int32
 	SentOff         bool
 	GoalsConceded   int32
+	CleanSheet      bool
 	RunID           uuid.UUID
 	SettingsSha256  string
 	VotoSource      string
@@ -125,6 +126,7 @@ type PlayerScore struct {
 	YellowCards     int32
 	SentOff         bool
 	GoalsConceded   int32
+	CleanSheet      bool
 }
 
 type ProviderRef struct {

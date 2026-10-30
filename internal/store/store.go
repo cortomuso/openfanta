@@ -280,6 +280,7 @@ func scoreRows(runID uuid.UUID, scores []engine.Score) ([]db.InsertPlayerScoresP
 			PenaltiesMissed: int32(sc.Line.PenaltiesMissed), PenaltiesSaved: int32(sc.Line.PenaltiesSaved),
 			OwnGoals: int32(sc.Line.OwnGoals), Assists: int32(sc.Line.Assists),
 			YellowCards: int32(sc.Line.YellowCards), SentOff: sc.Line.SentOff, GoalsConceded: int32(sc.Line.GoalsConceded),
+			CleanSheet: sc.Line.CleanSheet(),
 		})
 	}
 	return rows, nil

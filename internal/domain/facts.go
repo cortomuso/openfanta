@@ -83,3 +83,10 @@ type PlayerLine struct {
 	SentOff         bool     `json:"sent_off"`
 	GoalsConceded   int      `json:"goals_conceded"` // by the player's team while they were on the pitch
 }
+
+// CleanSheet reports whether a goalkeeper played and their team conceded no
+// goal while they were on the pitch. Whether it earns a bonus is up to the
+// engine and the league settings.
+func (l PlayerLine) CleanSheet() bool {
+	return l.Role == RoleGoalkeeper && l.Minutes > 0 && l.GoalsConceded == 0
+}

@@ -318,7 +318,7 @@ components:
     PlayerMatchStats:
       type: object
       description: What the player did in the match, as derived from provider events. Shoot-outs never count.
-      required: [goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded]
+      required: [goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, clean_sheet]
       properties:
         goals: { type: integer, minimum: 0, description: "Goals scored, excluding penalties" }
         penalties_scored: { type: integer, minimum: 0 }
@@ -329,6 +329,7 @@ components:
         yellow_cards: { type: integer, minimum: 0, description: "Includes a second yellow" }
         sent_off: { type: boolean, description: "Sent off by a straight red or a second yellow" }
         goals_conceded: { type: integer, minimum: 0, description: "Goals the player's team conceded while the player was on the pitch, own goals included" }
+        clean_sheet: { type: boolean, description: "Goalkeeper who played and whose team conceded no goal while they were on the pitch. Whether it earned the bonus is in the breakdown (gk_clean_sheet): none when the voto is a voto d'ufficio or under the league's minimum minutes" }
     ScoreList:
       type: object
       required: [settings_sha256, voto_source, scores]

@@ -29,6 +29,8 @@ Today the engine understands the per-event values, `player.cards.red_replaces_ye
 attackers apart yet, so only a `P` (goalkeeper) entry under `by_role` has an effect, and every
 assist uses `assist.open_play`.
 
+The clean-sheet bonus goes to a goalkeeper who played, whose team conceded nothing while they were on the pitch, who has a real voto (not a voto d'ufficio), and who played at least `clean_sheet.min_minutes`.
+
 ## History
 
 Every league keeps an append-only list of settings versions, each linked to the one before it by hash.

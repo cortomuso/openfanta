@@ -204,6 +204,7 @@ type InsertPlayerScoresParams struct {
 	YellowCards     int32
 	SentOff         bool
 	GoalsConceded   int32
+	CleanSheet      bool
 }
 
 const insertRawPayload = `-- name: InsertRawPayload :one

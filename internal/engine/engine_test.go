@@ -347,3 +347,57 @@ func TestSenzaVotoPolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanSheetEligibility(t *testing.T) {
+	minutes := func(n int) settings.Player {
+		p := classic(t)
+		events := map[string]settings.Event{}
+		for id, e := range p.Events {
+			events[id] = e
+		}
+		cs := events[settings.EventCleanSheet]
+		cs.MinMinutes = &n
+		events[settings.EventCleanSheet] = cs
+		p.Events = events
+		return p
+	}
+	cases := []struct {
+		name  string
+		rules settings.Player
+		line  d.PlayerLine
+		voto  *d.Points
+		want  bool // clean-sheet bonus in the breakdown
+	}{
+		{name: "full match", rules: classic(t), line: keeper("gk", nil), voto: pts(600), want: true},
+		{name: "conceded", rules: classic(t), line: keeper("gk", func(l *d.PlayerLine) { l.GoalsConceded = 1 }), voto: pts(600)},
+		{name: "exactly the threshold", rules: minutes(60), line: keeper("gk", func(l *d.PlayerLine) { l.Minutes = 60 }), voto: pts(600), want: true},
+		{name: "one minute short", rules: minutes(60), line: keeper("gk", func(l *d.PlayerLine) { l.Minutes = 59 }), voto: pts(600)},
+		{name: "outfield player never gets it", rules: classic(t), line: outfield("p", nil), voto: pts(600)},
+		{
+			name: "voto d'ufficio from a goal gets no bonus", rules: classic(t),
+			line: keeper("gk", func(l *d.PlayerLine) { l.Minutes, l.Goals = 5, 1 }),
+		},
+		{
+			name: "voto d'ufficio from a red gets no bonus", rules: classic(t),
+			line: keeper("gk", func(l *d.PlayerLine) { l.Minutes, l.SentOff = 5, true }),
+		},
+		{name: "s.v. gets no bonus", rules: classic(t), line: keeper("gk", func(l *d.PlayerLine) { l.Minutes = 5 })},
+		{name: "no voto from the source", rules: classic(t), line: keeper("gk", nil)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			votes := map[d.PlayerID]d.Points{}
+			if c.voto != nil {
+				votes["gk"], votes["p"] = *c.voto, *c.voto
+			}
+			s := Compute([]d.PlayerLine{c.line}, votes, c.rules)[0]
+			got := false
+			for _, b := range s.Breakdown {
+				got = got || b.Code == GKCleanSheet
+			}
+			if got != c.want {
+				t.Errorf("clean-sheet bonus = %v, want %v (breakdown %+v)", got, c.want, s.Breakdown)
+			}
+		})
+	}
+}

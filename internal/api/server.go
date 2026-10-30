@@ -277,6 +277,7 @@ func score(r db.CurrentScore) (Score, error) {
 			Goals: int(r.Goals), PenaltiesScored: int(r.PenaltiesScored), PenaltiesMissed: int(r.PenaltiesMissed),
 			PenaltiesSaved: int(r.PenaltiesSaved), OwnGoals: int(r.OwnGoals), Assists: int(r.Assists),
 			YellowCards: int(r.YellowCards), SentOff: r.SentOff, GoalsConceded: int(r.GoalsConceded),
+			CleanSheet: r.CleanSheet,
 		},
 		Breakdown: breakdown,
 		Run:       RunRef{Id: r.RunID.String(), SettingsSha256: r.SettingsSha256, VotoSource: r.VotoSource, ComputedAt: r.ComputedAt},

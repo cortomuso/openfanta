@@ -79,7 +79,7 @@ var eventCode = map[string]Code{
 
 // Version identifies the engine's scoring semantics. Bump it whenever a change
 // can alter results for the same input; it is recorded on every computation run.
-const Version = "1"
+const Version = "2"
 
 // BreakdownItem is one bonus or malus applied to a player.
 type BreakdownItem struct {
@@ -130,7 +130,8 @@ func score(l d.PlayerLine, votes map[d.PlayerID]d.Points, p settings.Player) Sco
 	}
 	if l.Role == d.RoleGoalkeeper {
 		counts[GKGoalConceded] = l.GoalsConceded
-		if l.GoalsConceded == 0 && l.Minutes >= p.CleanSheetMinMinutes() {
+		// A voto d'ufficio is not a performance: no clean-sheet bonus.
+		if l.CleanSheet() && !s.VotoUfficio && l.Minutes >= p.CleanSheetMinMinutes() {
 			counts[GKCleanSheet] = 1
 		}
 	}
