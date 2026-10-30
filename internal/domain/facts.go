@@ -72,6 +72,8 @@ type Appearance struct {
 	// Rating is the provider's own player rating, if any. The engine ignores it;
 	// a voto source may use it.
 	Rating *Points `json:"rating,omitempty"`
+	// PlayerOfTheMatch is set when the provider names this player man of the match.
+	PlayerOfTheMatch bool `json:"player_of_the_match,omitempty"`
 }
 
 // MatchFacts is the provider-agnostic description of a finished match: the
@@ -104,6 +106,11 @@ type PlayerLine struct {
 	YellowCards         int  `json:"yellow_cards"`
 	SentOff             bool `json:"sent_off"`
 	GoalsConceded       int  `json:"goals_conceded"` // by the player's team while they were on the pitch
+	// DecisiveGoalsWin is 1 for the goal that decided a won match, DecisiveGoalsDraw
+	// for the goal that levelled a drawn one. See timeline.decisive.
+	DecisiveGoalsWin  int  `json:"decisive_goals_win"`
+	DecisiveGoalsDraw int  `json:"decisive_goals_draw"`
+	PlayerOfTheMatch  bool `json:"player_of_the_match"`
 }
 
 // CleanSheet reports whether a goalkeeper played and their team conceded no

@@ -207,6 +207,9 @@ type InsertPlayerScoresParams struct {
 	CleanSheet          bool
 	AssistsSetPiece     int32
 	AssistsContribution int32
+	DecisiveGoalsWin    int32
+	DecisiveGoalsDraw   int32
+	PlayerOfTheMatch    bool
 }
 
 const insertRawPayload = `-- name: InsertRawPayload :one

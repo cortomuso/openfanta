@@ -64,6 +64,9 @@ type CurrentScore struct {
 	CleanSheet          bool
 	AssistsSetPiece     int32
 	AssistsContribution int32
+	DecisiveGoalsWin    int32
+	DecisiveGoalsDraw   int32
+	PlayerOfTheMatch    bool
 	RunID               uuid.UUID
 	SettingsSha256      string
 	VotoSource          string
@@ -131,6 +134,9 @@ type PlayerScore struct {
 	CleanSheet          bool
 	AssistsSetPiece     int32
 	AssistsContribution int32
+	DecisiveGoalsWin    int32
+	DecisiveGoalsDraw   int32
+	PlayerOfTheMatch    bool
 }
 
 type ProviderRef struct {

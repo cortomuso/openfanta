@@ -64,7 +64,7 @@ func Derive(f d.MatchFacts) ([]d.PlayerLine, error) {
 		if _, dup := players[a.Player]; dup {
 			return nil, invalid("player %q listed twice", a.Player)
 		}
-		p := &player{app: a, line: d.PlayerLine{Player: a.Player, Team: a.Team, Role: a.Role}}
+		p := &player{app: a, line: d.PlayerLine{Player: a.Player, Team: a.Team, Role: a.Role, PlayerOfTheMatch: a.PlayerOfTheMatch}}
 		if a.Starter {
 			p.stint = &stint{onSeq: beforeKickoff, offSeq: noExit, onMinute: 0}
 			p.played = true
@@ -82,6 +82,8 @@ func Derive(f d.MatchFacts) ([]d.PlayerLine, error) {
 			return nil, fmt.Errorf("event seq %d (%s): %w", e.Seq, e.Kind, err)
 		}
 	}
+
+	decisive(events, f, players)
 
 	lines := make([]d.PlayerLine, 0, len(players))
 	for _, p := range players {
@@ -217,4 +219,77 @@ func keeperOnPitch(players map[d.PlayerID]*player, team d.TeamID, seq int) *play
 		}
 	}
 	return found
+}
+
+// decisive credits the decisive goal of the match, counted from the regulation
+// goal events (minute <= Length, shoot-outs never appear in the events).
+//
+//   - Won match: the winner's goal number loser+1, the one that put them ahead
+//     for good.
+//   - Drawn match with goals: the last goal, which levelled the score.
+//
+// Only goals and penalty goals are credited. If the decisive goal was an own
+// goal, nobody gets the bonus.
+func decisive(events []d.Event, f d.MatchFacts, players map[d.PlayerID]*player) {
+	type goal struct {
+		team   d.TeamID // the team the goal counts for
+		scorer *player  // nil for an own goal
+	}
+	var goals []goal
+	count := map[d.TeamID]int{}
+	for _, e := range events {
+		if e.Minute > f.Length {
+			continue
+		}
+		var g goal
+		switch e.Kind {
+		case d.EventGoal, d.EventPenaltyGoal:
+			g = goal{team: e.Team, scorer: players[e.Player]}
+		case d.EventOwnGoal:
+			g = goal{team: otherTeam(f, e.Team)}
+		default:
+			continue
+		}
+		goals = append(goals, g)
+		count[g.team]++
+	}
+	home, away := count[f.HomeTeam], count[f.AwayTeam]
+	var pick *goal
+	win := true
+	switch {
+	case home == away && home > 0:
+		win, pick = false, &goals[len(goals)-1]
+	case home == away:
+		return
+	default:
+		winner, loserGoals := f.HomeTeam, away
+		if away > home {
+			winner, loserGoals = f.AwayTeam, home
+		}
+		n := 0
+		for i := range goals {
+			if goals[i].team == winner {
+				if n == loserGoals {
+					pick = &goals[i]
+					break
+				}
+				n++
+			}
+		}
+	}
+	if pick == nil || pick.scorer == nil {
+		return
+	}
+	if win {
+		pick.scorer.line.DecisiveGoalsWin++
+	} else {
+		pick.scorer.line.DecisiveGoalsDraw++
+	}
+}
+
+func otherTeam(f d.MatchFacts, t d.TeamID) d.TeamID {
+	if t == f.HomeTeam {
+		return f.AwayTeam
+	}
+	return f.HomeTeam
 }

@@ -454,3 +454,37 @@ func TestAssistClasses(t *testing.T) {
 		}
 	})
 }
+
+func TestDecisiveGoalsAndPlayerOfTheMatch(t *testing.T) {
+	rules := classic(t)
+	events := map[string]settings.Event{}
+	for id, e := range rules.Events {
+		events[id] = e
+	}
+	win, draw, motm := d.Points(100), d.Points(50), d.Points(200)
+	events[settings.EventDecisiveWin] = settings.Event{Value: &win}
+	events[settings.EventDecisiveDraw] = settings.Event{Value: &draw}
+	events[settings.EventPlayerOfMatch] = settings.Event{Value: &motm}
+	rules.Events = events
+
+	line := outfield("p", func(l *d.PlayerLine) {
+		l.Goals, l.DecisiveGoalsWin, l.PlayerOfTheMatch = 1, 1, true
+	})
+	s := Compute([]d.PlayerLine{line}, map[d.PlayerID]d.Points{"p": 700}, rules)[0]
+	want := []BreakdownItem{item(Goal, 1, 300), item(DecisiveWin, 1, 100), item(PlayerOfMatch, 1, 200)}
+	if !reflect.DeepEqual(s.Breakdown, want) || *s.Fantavoto != 1300 {
+		t.Errorf("breakdown %+v, fantavoto %s", s.Breakdown, deref(s.Fantavoto))
+	}
+	draw1 := outfield("q", func(l *d.PlayerLine) { l.Goals, l.DecisiveGoalsDraw = 1, 1 })
+	s = Compute([]d.PlayerLine{draw1}, map[d.PlayerID]d.Points{"q": 600}, rules)[0]
+	if got := s.Breakdown[len(s.Breakdown)-1]; got != item(DecisiveDraw, 1, 50) {
+		t.Errorf("last item %+v, want the draw bonus", got)
+	}
+
+	t.Run("classic gives them no value", func(t *testing.T) {
+		s := Compute([]d.PlayerLine{line}, map[d.PlayerID]d.Points{"p": 700}, classic(t))[0]
+		if *s.Fantavoto != 1000 {
+			t.Errorf("fantavoto %s, want 10.00", s.Fantavoto)
+		}
+	})
+}
