@@ -282,6 +282,8 @@ func scoreRows(runID uuid.UUID, scores []engine.Score) ([]db.InsertPlayerScoresP
 			YellowCards: int32(sc.Line.YellowCards), SentOff: sc.Line.SentOff, GoalsConceded: int32(sc.Line.GoalsConceded),
 			CleanSheet:      sc.Line.CleanSheet(),
 			AssistsSetPiece: int32(sc.Line.AssistsSetPiece), AssistsContribution: int32(sc.Line.AssistsContribution),
+			DecisiveGoalsWin: int32(sc.Line.DecisiveGoalsWin), DecisiveGoalsDraw: int32(sc.Line.DecisiveGoalsDraw),
+			PlayerOfTheMatch: sc.Line.PlayerOfTheMatch,
 		})
 	}
 	return rows, nil

@@ -335,3 +335,22 @@ func TestGoalSubTypesDoNotClassifyAssists(t *testing.T) {
 		}
 	}
 }
+
+func TestParseManOfTheMatch(t *testing.T) {
+	body := `{"data":{"id":1,"participants":[{"id":1,"meta":{"location":"home"}},{"id":2,"meta":{"location":"away"}}],
+		"lineups":[
+			{"player_id":5,"team_id":1,"type_id":11,"details":[{"type_id":1490,"data":{"value":1}}]},
+			{"player_id":6,"team_id":1,"type_id":11,"details":[{"type_id":1490,"data":{"value":0}}]},
+			{"player_id":7,"team_id":2,"type_id":11}],"events":[]}}`
+	f, err := ParseFixture(provider.Raw{Key: "motm", Body: []byte(body)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[d.PlayerID]bool{}
+	for _, a := range f.Facts.Appearances {
+		got[a.Player] = a.PlayerOfTheMatch
+	}
+	if !got["5"] || got["6"] || got["7"] {
+		t.Errorf("player of the match = %v, want only player 5", got)
+	}
+}

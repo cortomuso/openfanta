@@ -60,7 +60,8 @@
             "penalty_missed": { "$ref": "#/$defs/event" },
             "clean_sheet": { "$ref": "#/$defs/event" },
             "decisive_goal.win": { "$ref": "#/$defs/event" },
-            "decisive_goal.draw": { "$ref": "#/$defs/event" }
+            "decisive_goal.draw": { "$ref": "#/$defs/event" },
+            "player_of_the_match": { "$ref": "#/$defs/event" }
           },
           "additionalProperties": false
         },

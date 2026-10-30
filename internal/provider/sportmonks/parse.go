@@ -15,7 +15,7 @@ import (
 
 // parserVersion must change whenever parsing can produce different output
 // from the same payload.
-const parserVersion = "2"
+const parserVersion = "3"
 
 // ErrParse wraps every parsing failure.
 var ErrParse = errors.New("sportmonks: cannot parse payload")
@@ -38,7 +38,8 @@ const (
 
 	positionGoalkeeper = 24
 
-	detailRating = 118
+	detailRating     = 118
+	detailManOfMatch = 1490 // data.value is 1 for the man of the match; most fixtures have none
 )
 
 // Fixture states after which a match is over.
@@ -227,6 +228,11 @@ func ParseFixture(r provider.Raw) (provider.Fixture, error) {
 			if d.TypeID == detailRating {
 				if p, ok := parseRating(d.Data.Value); ok {
 					app.Rating = &p
+				}
+			}
+			if d.TypeID == detailManOfMatch {
+				if v, ok := parseRating(d.Data.Value); ok && v > 0 {
+					app.PlayerOfTheMatch = true
 				}
 			}
 		}
