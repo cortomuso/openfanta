@@ -221,8 +221,8 @@ func keeperOnPitch(players map[d.PlayerID]*player, team d.TeamID, seq int) *play
 	return found
 }
 
-// decisive credits the decisive goal of the match, counted from every goal
-// event, extra time included (shoot-outs never appear in the events).
+// decisive credits the decisive goal of the match, counted from the regulation
+// goal events (minute <= Length, shoot-outs never appear in the events).
 //
 //   - Won match: the winner's goal number loser+1, the one that put them ahead
 //     for good.
@@ -238,6 +238,9 @@ func decisive(events []d.Event, f d.MatchFacts, players map[d.PlayerID]*player) 
 	var goals []goal
 	count := map[d.TeamID]int{}
 	for _, e := range events {
+		if e.Minute > f.Length {
+			continue
+		}
 		var g goal
 		switch e.Kind {
 		case d.EventGoal, d.EventPenaltyGoal:
