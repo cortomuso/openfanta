@@ -10,18 +10,21 @@ import (
 
 // Event ids, as they appear under player.events.
 const (
-	EventGoal         = "goal"
-	EventPenaltyGoal  = "penalty_goal"
-	EventAssist       = "assist.open_play"
-	EventAssistSet    = "assist.set_piece"
-	EventAssistContr  = "assist.contribution"
-	EventYellow       = "yellow"
-	EventRed          = "red"
-	EventOwnGoal      = "own_goal"
-	EventGoalConceded = "goal_conceded"
-	EventPenaltySaved = "penalty_saved"
-	EventPenaltyMiss  = "penalty_missed"
-	EventCleanSheet   = "clean_sheet"
+	EventGoal          = "goal"
+	EventPenaltyGoal   = "penalty_goal"
+	EventAssist        = "assist.open_play"
+	EventAssistSet     = "assist.set_piece"
+	EventAssistContr   = "assist.contribution"
+	EventYellow        = "yellow"
+	EventRed           = "red"
+	EventOwnGoal       = "own_goal"
+	EventGoalConceded  = "goal_conceded"
+	EventPenaltySaved  = "penalty_saved"
+	EventPenaltyMiss   = "penalty_missed"
+	EventCleanSheet    = "clean_sheet"
+	EventDecisiveWin   = "decisive_goal.win"
+	EventDecisiveDraw  = "decisive_goal.draw"
+	EventPlayerOfMatch = "player_of_the_match"
 )
 
 // Penalty goal modes.

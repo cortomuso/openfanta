@@ -51,6 +51,9 @@ func (r iteratorForInsertPlayerScores) Values() ([]interface{}, error) {
 		r.rows[0].CleanSheet,
 		r.rows[0].AssistsSetPiece,
 		r.rows[0].AssistsContribution,
+		r.rows[0].DecisiveGoalsWin,
+		r.rows[0].DecisiveGoalsDraw,
+		r.rows[0].PlayerOfTheMatch,
 	}, nil
 }
 
@@ -59,5 +62,5 @@ func (r iteratorForInsertPlayerScores) Err() error {
 }
 
 func (q *Queries) InsertPlayerScores(ctx context.Context, arg []InsertPlayerScoresParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"player_scores"}, []string{"run_id", "player_id", "team_id", "role", "minutes", "voto", "fantavoto", "senza_voto", "voto_ufficio", "breakdown", "goals", "penalties_scored", "penalties_missed", "penalties_saved", "own_goals", "assists", "yellow_cards", "sent_off", "goals_conceded", "clean_sheet", "assists_set_piece", "assists_contribution"}, &iteratorForInsertPlayerScores{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"player_scores"}, []string{"run_id", "player_id", "team_id", "role", "minutes", "voto", "fantavoto", "senza_voto", "voto_ufficio", "breakdown", "goals", "penalties_scored", "penalties_missed", "penalties_saved", "own_goals", "assists", "yellow_cards", "sent_off", "goals_conceded", "clean_sheet", "assists_set_piece", "assists_contribution", "decisive_goals_win", "decisive_goals_draw", "player_of_the_match"}, &iteratorForInsertPlayerScores{rows: arg})
 }
