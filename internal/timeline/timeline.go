@@ -118,6 +118,9 @@ func apply(e d.Event, players map[d.PlayerID]*player, opponent map[d.TeamID]d.Te
 	if p.app.Team != e.Team {
 		return invalid("player %q does not play for %q", e.Player, e.Team)
 	}
+	if !e.AssistClass.Valid() {
+		return invalid("unknown assist class %q", e.AssistClass)
+	}
 	var related *player
 	if e.Related != "" {
 		if related, ok = players[e.Related]; !ok {
@@ -140,6 +143,12 @@ func apply(e d.Event, players map[d.PlayerID]*player, opponent map[d.TeamID]d.Te
 		}
 		if related != nil {
 			related.line.Assists++
+			switch e.AssistClass {
+			case d.AssistSetPiece:
+				related.line.AssistsSetPiece++
+			case d.AssistContribution:
+				related.line.AssistsContribution++
+			}
 		}
 		concede(players, opponent[e.Team], e.Seq)
 	case d.EventOwnGoal:

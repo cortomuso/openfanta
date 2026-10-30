@@ -77,8 +77,8 @@ INSERT INTO computation_runs (
 INSERT INTO player_scores (
     run_id, player_id, team_id, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown,
     goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists,
-    yellow_cards, sent_off, goals_conceded
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19);
+    yellow_cards, sent_off, goals_conceded, clean_sheet, assists_set_piece, assists_contribution
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22);
 
 -- name: SetCurrentRun :exec
 INSERT INTO current_runs (fixture_id, settings_sha256, voto_source, run_id) VALUES ($1, $2, $3, $4)

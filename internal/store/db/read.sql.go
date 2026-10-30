@@ -64,7 +64,7 @@ func (q *Queries) FixtureRuns(ctx context.Context, fixtureID uuid.UUID) ([]Fixtu
 }
 
 const fixtureScores = `-- name: FixtureScores :many
-SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, run_id, settings_sha256, voto_source, computed_at FROM current_scores
+SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, clean_sheet, assists_set_piece, assists_contribution, run_id, settings_sha256, voto_source, computed_at FROM current_scores
 WHERE fixture_id = $1 AND settings_sha256 = $2 AND voto_source = $3
 ORDER BY team_name, player_name, player_id
 `
@@ -109,6 +109,9 @@ func (q *Queries) FixtureScores(ctx context.Context, arg FixtureScoresParams) ([
 			&i.YellowCards,
 			&i.SentOff,
 			&i.GoalsConceded,
+			&i.CleanSheet,
+			&i.AssistsSetPiece,
+			&i.AssistsContribution,
 			&i.RunID,
 			&i.SettingsSha256,
 			&i.VotoSource,
@@ -341,7 +344,7 @@ func (q *Queries) MatchdayExists(ctx context.Context, arg MatchdayExistsParams) 
 }
 
 const matchdayScores = `-- name: MatchdayScores :many
-SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, run_id, settings_sha256, voto_source, computed_at FROM current_scores
+SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, clean_sheet, assists_set_piece, assists_contribution, run_id, settings_sha256, voto_source, computed_at FROM current_scores
 WHERE season_id = $1 AND matchday = $2 AND settings_sha256 = $3 AND voto_source = $4
 ORDER BY kickoff, fixture_id, team_name, player_name, player_id
 `
@@ -392,6 +395,9 @@ func (q *Queries) MatchdayScores(ctx context.Context, arg MatchdayScoresParams) 
 			&i.YellowCards,
 			&i.SentOff,
 			&i.GoalsConceded,
+			&i.CleanSheet,
+			&i.AssistsSetPiece,
+			&i.AssistsContribution,
 			&i.RunID,
 			&i.SettingsSha256,
 			&i.VotoSource,
@@ -408,7 +414,7 @@ func (q *Queries) MatchdayScores(ctx context.Context, arg MatchdayScoresParams) 
 }
 
 const playerSeasonScores = `-- name: PlayerSeasonScores :many
-SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, run_id, settings_sha256, voto_source, computed_at FROM current_scores
+SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, clean_sheet, assists_set_piece, assists_contribution, run_id, settings_sha256, voto_source, computed_at FROM current_scores
 WHERE season_id = $1 AND player_id = $2 AND settings_sha256 = $3 AND voto_source = $4
 ORDER BY matchday, kickoff
 `
@@ -459,6 +465,9 @@ func (q *Queries) PlayerSeasonScores(ctx context.Context, arg PlayerSeasonScores
 			&i.YellowCards,
 			&i.SentOff,
 			&i.GoalsConceded,
+			&i.CleanSheet,
+			&i.AssistsSetPiece,
+			&i.AssistsContribution,
 			&i.RunID,
 			&i.SettingsSha256,
 			&i.VotoSource,

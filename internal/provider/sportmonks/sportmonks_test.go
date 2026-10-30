@@ -317,3 +317,21 @@ func TestParseDropsRescindedEvents(t *testing.T) {
 		}
 	}
 }
+
+// Real payloads put the way the goal was struck in sub_type_id (left foot 1521,
+// right foot 1522, header 1694). It says nothing about the assist, so every
+// assist stays open play.
+func TestGoalSubTypesDoNotClassifyAssists(t *testing.T) {
+	const head = `{"data":{"id":1,"participants":[{"id":1,"meta":{"location":"home"}},{"id":2,"meta":{"location":"away"}}],
+		"lineups":[{"player_id":5,"team_id":1,"type_id":11},{"player_id":6,"team_id":1,"type_id":11}],"events":[`
+	for _, sub := range []int{1521, 1522, 1694} {
+		body := head + fmt.Sprintf(`{"id":1,"type_id":14,"sub_type_id":%d,"player_id":5,"related_player_id":6,"team_id":1,"minute":10}]}}`, sub)
+		f, err := ParseFixture(provider.Raw{Key: "goal", Body: []byte(body)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if e := f.Facts.Events[0]; e.Kind != d.EventGoal || e.Related != "6" || e.AssistClass != d.AssistOpenPlay {
+			t.Errorf("sub type %d: event = %+v, want a goal with an open-play assist", sub, e)
+		}
+	}
+}

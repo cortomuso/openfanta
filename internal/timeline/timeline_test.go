@@ -293,3 +293,55 @@ func TestRedCardOnBenchPlayerDoesNotMakeThemPlay(t *testing.T) {
 		t.Error("a bench player sent off never played and must not appear")
 	}
 }
+
+func TestCleanSheet(t *testing.T) {
+	m := byPlayer(t, match(
+		ev(60, d.EventSubstitution, "H", "hGK", "hGK2"),
+		ev(70, d.EventGoal, "A", "a1"),
+		ev(80, d.EventOwnGoal, "A", "a2"),
+	))
+	cases := map[d.PlayerID]bool{
+		"hGK":  true,  // off before either goal
+		"hGK2": false, // on for both goals, one of them an own goal
+		"aGK":  false, // conceded to the own goal
+		"h1":   false, // outfield players never keep one
+	}
+	for id, want := range cases {
+		if got := m[id].CleanSheet(); got != want {
+			t.Errorf("%s clean sheet = %v, want %v (%+v)", id, got, want, m[id])
+		}
+	}
+	if !byPlayer(t, match())["aGK"].CleanSheet() {
+		t.Error("goalless match: the starting keeper keeps a clean sheet")
+	}
+	if byPlayer(t, match())["aGK2"].CleanSheet() {
+		t.Error("an unused substitute keeper did not play")
+	}
+}
+
+func TestAssistClassesAreCountedSeparately(t *testing.T) {
+	goal := func(minute int, class d.AssistClass, assister string) d.Event {
+		e := ev(minute, d.EventGoal, "H", "h1", assister)
+		e.AssistClass = class
+		return e
+	}
+	m := byPlayer(t, match(
+		goal(10, d.AssistOpenPlay, "h2"),
+		goal(20, d.AssistSetPiece, "h2"),
+		goal(30, d.AssistContribution, "h3"),
+	))
+	if l := m["h2"]; l.Assists != 2 || l.AssistsSetPiece != 1 || l.AssistsContribution != 0 {
+		t.Errorf("h2 = %+v, want 2 assists of which 1 set piece", l)
+	}
+	if l := m["h3"]; l.Assists != 1 || l.AssistsContribution != 1 {
+		t.Errorf("h3 = %+v, want 1 contribution", l)
+	}
+}
+
+func TestUnknownAssistClassIsInvalid(t *testing.T) {
+	e := ev(10, d.EventGoal, "H", "h1", "h2")
+	e.AssistClass = "volley"
+	if _, err := Derive(match(e)); !errors.Is(err, ErrInvalidFacts) {
+		t.Errorf("err = %v, want ErrInvalidFacts", err)
+	}
+}

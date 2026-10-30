@@ -252,7 +252,10 @@ func ParseFixture(r provider.Raw) (provider.Fixture, error) {
 	return out, nil
 }
 
-// convertEvent maps one Sportmonks event to a domain event. keep is false for
+// convertEvent maps one Sportmonks event to a domain event. Every assist is an
+// open-play assist: the sub_type_id of a goal is how it was struck (left foot
+// 1521, right foot 1522, header 1694), not how it was made, and no other
+// structured field tells set pieces apart. keep is false for
 // events that do not matter for fantacalcio or were rescinded (e.g. by VAR).
 func convertEvent(e smEvent, teamOf map[string]domain.TeamID) (domain.Event, bool, error) {
 	if e.Rescinded || e.PlayerID == nil {

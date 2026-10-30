@@ -86,7 +86,7 @@
                 "base": { "$ref": "#/$defs/voto" },
                 "events": {
                   "type": "array",
-                  "items": { "enum": ["goal", "penalty_goal", "penalty_saved", "assist.open_play", "assist.set_piece", "yellow", "own_goal", "penalty_missed"] },
+                  "items": { "enum": ["goal", "penalty_goal", "penalty_saved", "assist.open_play", "assist.set_piece", "assist.contribution", "yellow", "own_goal", "penalty_missed"] },
                   "uniqueItems": true
                 }
               },
