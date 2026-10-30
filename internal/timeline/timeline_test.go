@@ -390,9 +390,14 @@ func TestDecisiveGoals(t *testing.T) {
 			wantWin: []d.PlayerID{"h1"},
 		},
 		{
-			name:    "extra time is ignored",
+			name:    "extra time counts",
 			events:  []d.Event{ev(10, d.EventGoal, "H", "h1"), ev(100, d.EventGoal, "A", "a1"), ev(110, d.EventGoal, "A", "a2")},
-			wantWin: []d.PlayerID{"h1"},
+			wantWin: []d.PlayerID{"a2"},
+		},
+		{
+			name:     "an extra-time goal can level the match for good",
+			events:   []d.Event{ev(10, d.EventGoal, "H", "h1"), ev(105, d.EventGoal, "A", "a1")},
+			wantDraw: []d.PlayerID{"a1"},
 		},
 		{
 			name:    "stoppage time at the full length still counts",

@@ -331,8 +331,8 @@ components:
         yellow_cards: { type: integer, minimum: 0, description: "Includes a second yellow" }
         sent_off: { type: boolean, description: "Sent off by a straight red or a second yellow" }
         goals_conceded: { type: integer, minimum: 0, description: "Goals the player's team conceded while the player was on the pitch, own goals included" }
-        decisive_goals_win: { type: integer, minimum: 0, maximum: 1, description: "1 for the goal that put the winner ahead for good (the winner's goal number loser+1, regulation time, goals and penalty goals only; an own goal credits nobody)" }
-        decisive_goals_draw: { type: integer, minimum: 0, maximum: 1, description: "1 for the last goal of a drawn match with goals, the one that levelled the score (regulation time; an own goal credits nobody)" }
+        decisive_goals_win: { type: integer, minimum: 0, maximum: 1, description: "1 for the goal that put the winner ahead for good (the winner's goal number loser+1, extra time included, goals and penalty goals only; an own goal credits nobody)" }
+        decisive_goals_draw: { type: integer, minimum: 0, maximum: 1, description: "1 for the last goal of a drawn match with goals, the one that levelled the score (extra time included; an own goal credits nobody)" }
         player_of_the_match: { type: boolean, description: "Named man of the match by the provider. Many fixtures have none" }
         clean_sheet: { type: boolean, description: "Goalkeeper who played and whose team conceded no goal while they were on the pitch. Whether it earned the bonus is in the breakdown (gk_clean_sheet): none when the voto is a voto d'ufficio or under the league's minimum minutes" }
     ScoreList:
