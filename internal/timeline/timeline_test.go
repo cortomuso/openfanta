@@ -345,3 +345,87 @@ func TestUnknownAssistClassIsInvalid(t *testing.T) {
 		t.Errorf("err = %v, want ErrInvalidFacts", err)
 	}
 }
+
+func TestDecisiveGoals(t *testing.T) {
+	cases := []struct {
+		name     string
+		events   []d.Event
+		wantWin  []d.PlayerID
+		wantDraw []d.PlayerID
+	}{
+		{name: "goalless draw", events: nil},
+		{name: "1-0", events: []d.Event{ev(10, d.EventGoal, "H", "h1")}, wantWin: []d.PlayerID{"h1"}},
+		{
+			name:    "3-0: the first goal is already decisive",
+			events:  []d.Event{ev(10, d.EventGoal, "H", "h1"), ev(20, d.EventGoal, "H", "h2"), ev(30, d.EventGoal, "H", "h3")},
+			wantWin: []d.PlayerID{"h1"},
+		},
+		{
+			name:    "2-1 after leading: the winner's second goal",
+			events:  []d.Event{ev(10, d.EventGoal, "H", "h1"), ev(20, d.EventGoal, "A", "a1"), ev(30, d.EventGoal, "H", "h2")},
+			wantWin: []d.PlayerID{"h2"},
+		},
+		{
+			name:    "2-1 for the away side after trailing",
+			events:  []d.Event{ev(10, d.EventGoal, "H", "h1"), ev(20, d.EventGoal, "A", "a1"), ev(30, d.EventGoal, "A", "a2")},
+			wantWin: []d.PlayerID{"a2"},
+		},
+		{
+			name:     "2-2: the last goal levelled it",
+			events:   []d.Event{ev(10, d.EventGoal, "H", "h1"), ev(20, d.EventGoal, "A", "a1"), ev(30, d.EventGoal, "H", "h2"), ev(40, d.EventGoal, "A", "a2")},
+			wantDraw: []d.PlayerID{"a2"},
+		},
+		{
+			name:    "a penalty goal can be decisive",
+			events:  []d.Event{ev(10, d.EventGoal, "A", "a1"), ev(20, d.EventPenaltyGoal, "H", "h1"), ev(30, d.EventPenaltyGoal, "H", "h2")},
+			wantWin: []d.PlayerID{"h2"},
+		},
+		{
+			name:   "an own goal counts for the other side but credits nobody",
+			events: []d.Event{ev(10, d.EventOwnGoal, "A", "a1")},
+		},
+		{
+			name:    "an own goal that is not the decisive one still counts in the score",
+			events:  []d.Event{ev(10, d.EventOwnGoal, "A", "a1"), ev(20, d.EventGoal, "A", "a2"), ev(30, d.EventGoal, "H", "h1")},
+			wantWin: []d.PlayerID{"h1"},
+		},
+		{
+			name:    "extra time is ignored",
+			events:  []d.Event{ev(10, d.EventGoal, "H", "h1"), ev(100, d.EventGoal, "A", "a1"), ev(110, d.EventGoal, "A", "a2")},
+			wantWin: []d.PlayerID{"h1"},
+		},
+		{
+			name:    "stoppage time at the full length still counts",
+			events:  []d.Event{ev(90, d.EventGoal, "H", "h1")},
+			wantWin: []d.PlayerID{"h1"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := byPlayer(t, match(c.events...))
+			win, draw := map[d.PlayerID]bool{}, map[d.PlayerID]bool{}
+			for _, id := range c.wantWin {
+				win[id] = true
+			}
+			for _, id := range c.wantDraw {
+				draw[id] = true
+			}
+			for id, l := range m {
+				if (l.DecisiveGoalsWin == 1) != win[id] || (l.DecisiveGoalsDraw == 1) != draw[id] {
+					t.Errorf("%s: win %d, draw %d; want win %v, draw %v", id, l.DecisiveGoalsWin, l.DecisiveGoalsDraw, win[id], draw[id])
+				}
+			}
+		})
+	}
+}
+
+func TestPlayerOfTheMatchIsCarriedToTheLine(t *testing.T) {
+	f := match()
+	for i := range f.Appearances {
+		f.Appearances[i].PlayerOfTheMatch = f.Appearances[i].Player == "h2"
+	}
+	m := byPlayer(t, f)
+	if !m["h2"].PlayerOfTheMatch || m["h1"].PlayerOfTheMatch {
+		t.Errorf("h2 = %v, h1 = %v", m["h2"].PlayerOfTheMatch, m["h1"].PlayerOfTheMatch)
+	}
+}

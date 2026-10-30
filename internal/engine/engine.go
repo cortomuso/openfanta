@@ -30,12 +30,16 @@ const (
 	RedCard        Code = "red_card"
 	GKGoalConceded Code = "gk_goal_conceded"
 	GKCleanSheet   Code = "gk_clean_sheet"
+	DecisiveWin    Code = "decisive_goal_win"
+	DecisiveDraw   Code = "decisive_goal_draw"
+	PlayerOfMatch  Code = "player_of_the_match"
 )
 
 // AllScoreCodes lists every scoring code in a stable order.
 var AllScoreCodes = []Code{
 	Goal, PenaltyScored, PenaltyMissed, PenaltySaved, OwnGoal,
 	Assist, AssistSetPiece, AssistContrib, YellowCard, RedCard, GKGoalConceded, GKCleanSheet,
+	DecisiveWin, DecisiveDraw, PlayerOfMatch,
 }
 
 // value returns what one occurrence of code is worth to a player of the given
@@ -66,6 +70,12 @@ func value(p settings.Player, code Code, role d.Role) d.Points {
 		return p.Points(settings.EventGoalConceded, role)
 	case GKCleanSheet:
 		return p.Points(settings.EventCleanSheet, role)
+	case DecisiveWin:
+		return p.Points(settings.EventDecisiveWin, role)
+	case DecisiveDraw:
+		return p.Points(settings.EventDecisiveDraw, role)
+	case PlayerOfMatch:
+		return p.Points(settings.EventPlayerOfMatch, role)
 	}
 	return 0
 }
@@ -85,7 +95,7 @@ var eventCode = map[string]Code{
 
 // Version identifies the engine's scoring semantics. Bump it whenever a change
 // can alter results for the same input; it is recorded on every computation run.
-const Version = "3"
+const Version = "4"
 
 // BreakdownItem is one bonus or malus applied to a player.
 type BreakdownItem struct {
@@ -133,6 +143,10 @@ func score(l d.PlayerLine, votes map[d.PlayerID]d.Points, p settings.Player) Sco
 	counts := events
 	if l.SentOff && p.Cards.RedReplacesYellow {
 		counts[YellowCard] = 0
+	}
+	counts[DecisiveWin], counts[DecisiveDraw] = l.DecisiveGoalsWin, l.DecisiveGoalsDraw
+	if l.PlayerOfTheMatch {
+		counts[PlayerOfMatch] = 1
 	}
 	if l.Role == d.RoleGoalkeeper {
 		counts[GKGoalConceded] = l.GoalsConceded
