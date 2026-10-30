@@ -282,3 +282,68 @@ func TestCustomSettingsAreRespected(t *testing.T) {
 		t.Errorf("cameo should keep voto with min_minutes 0, got %v", deref(f))
 	}
 }
+
+func TestSenzaVotoPolicy(t *testing.T) {
+	withEvents := func(base d.Points, ids ...string) settings.Player {
+		p := classic(t)
+		p.SenzaVoto.WithOtherEvents = &struct {
+			Base   d.Points `json:"base"`
+			Events []string `json:"events"`
+		}{Base: base, Events: ids}
+		return p
+	}
+	cases := []struct {
+		name      string
+		rules     settings.Player
+		line      d.PlayerLine
+		wantSV    bool
+		wantVoto  d.Points
+		wantFanta d.Points
+	}{
+		{
+			name: "booked only is s.v. under classic", rules: classic(t),
+			line:   outfield("p", func(l *d.PlayerLine) { l.Minutes, l.YellowCards = 8, 1 }),
+			wantSV: true,
+		},
+		{
+			name: "booked only gets a voto when the league lists yellow", rules: withEvents(600, settings.EventYellow),
+			line:     outfield("p", func(l *d.PlayerLine) { l.Minutes, l.YellowCards = 8, 1 }),
+			wantVoto: 600, wantFanta: 550,
+		},
+		{
+			name: "own goal listed gets a voto", rules: withEvents(500, settings.EventOwnGoal),
+			line:     outfield("p", func(l *d.PlayerLine) { l.Minutes, l.OwnGoals = 4, 1 }),
+			wantVoto: 500, wantFanta: 300,
+		},
+		{
+			name: "missed penalty is not listed in classic", rules: classic(t),
+			line:   outfield("p", func(l *d.PlayerLine) { l.Minutes, l.PenaltiesMissed = 4, 1 }),
+			wantSV: true,
+		},
+		{
+			name: "sent off with a goal and no voto gets the red rule", rules: classic(t),
+			line:     outfield("p", func(l *d.PlayerLine) { l.Minutes, l.Goals, l.SentOff = 12, 1, true }),
+			wantVoto: 400, wantFanta: 600,
+		},
+		{
+			name: "nothing listed means every s.v. stays s.v.", rules: func() settings.Player { p := classic(t); p.SenzaVoto = settings.SenzaVoto{}; return p }(),
+			line:   outfield("p", func(l *d.PlayerLine) { l.Minutes, l.Goals = 4, 1 }),
+			wantSV: true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := Compute([]d.PlayerLine{c.line}, nil, c.rules)[0]
+			if s.SenzaVoto != c.wantSV {
+				t.Fatalf("senza voto = %v, want %v", s.SenzaVoto, c.wantSV)
+			}
+			if c.wantSV {
+				return
+			}
+			if !s.VotoUfficio || *s.Voto != c.wantVoto || *s.Fantavoto != c.wantFanta {
+				t.Errorf("ufficio %v, voto %s, fantavoto %s; want true, %s, %s",
+					s.VotoUfficio, deref(s.Voto), deref(s.Fantavoto), c.wantVoto, c.wantFanta)
+			}
+		})
+	}
+}

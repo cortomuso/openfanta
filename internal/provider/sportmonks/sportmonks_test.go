@@ -300,3 +300,20 @@ func TestClientParseMethodsDelegate(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// A card or goal later cancelled by video review never reaches the facts, so
+// it cannot score, send a player off or make a goal conceded.
+func TestParseDropsRescindedEvents(t *testing.T) {
+	const head = `{"data":{"id":1,"participants":[{"id":1,"meta":{"location":"home"}},{"id":2,"meta":{"location":"away"}}],
+		"lineups":[{"player_id":5,"team_id":1,"type_id":11},{"player_id":6,"team_id":1,"type_id":11},{"player_id":7,"team_id":2,"type_id":11}],"events":[`
+	for _, typeID := range []int{eventGoal, eventOwnGoal, eventPenalty, eventMissedPenalty, eventYellow, eventRed, eventYellowRed} {
+		body := head + fmt.Sprintf(`{"id":1,"type_id":%d,"player_id":5,"related_player_id":6,"team_id":1,"minute":80,"rescinded":true}]}}`, typeID)
+		f, err := ParseFixture(provider.Raw{Key: "rescinded", Body: []byte(body)})
+		if err != nil {
+			t.Fatalf("type %d: %v", typeID, err)
+		}
+		if len(f.Facts.Events) != 0 {
+			t.Errorf("type %d: events = %v, want none", typeID, f.Facts.Events)
+		}
+	}
+}

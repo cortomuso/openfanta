@@ -279,3 +279,17 @@ func TestCardOnBenchPlayerIsAccepted(t *testing.T) {
 		t.Error("booked bench player did not play and must not appear")
 	}
 }
+
+func TestRedCardAfterFinalWhistle(t *testing.T) {
+	m := byPlayer(t, match(ev(94, d.EventRedCard, "H", "h1")))
+	if l := m["h1"]; !l.SentOff || l.Minutes != 90 {
+		t.Errorf("h1 = %+v, want sent off with the full 90 minutes", l)
+	}
+}
+
+func TestRedCardOnBenchPlayerDoesNotMakeThemPlay(t *testing.T) {
+	m := byPlayer(t, match(ev(70, d.EventRedCard, "H", "h4")))
+	if _, ok := m["h4"]; ok {
+		t.Error("a bench player sent off never played and must not appear")
+	}
+}
