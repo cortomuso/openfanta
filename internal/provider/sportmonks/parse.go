@@ -15,7 +15,14 @@ import (
 
 // parserVersion must change whenever parsing can produce different output
 // from the same payload.
-const parserVersion = "2"
+const parserVersion = "3"
+
+// assistClassBySubType maps the sub_type_id of a goal or penalty event to the
+// class of its assist. A goal whose sub_type_id is absent or not listed is an
+// open-play assist. UNVERIFIED: no real payload has confirmed which sub types
+// Sportmonks uses for set-piece goals, so this is empty on purpose. Fill it in
+// from a real payload, with a test, and bump parserVersion.
+var assistClassBySubType = map[int]domain.AssistClass{}
 
 // ErrParse wraps every parsing failure.
 var ErrParse = errors.New("sportmonks: cannot parse payload")
@@ -263,6 +270,10 @@ func convertEvent(e smEvent, teamOf map[string]domain.TeamID) (domain.Event, boo
 	if e.RelatedPlayerID != nil {
 		related = e.RelatedPlayerID.String()
 	}
+	var class domain.AssistClass
+	if e.SubTypeID != nil && (e.TypeID == eventGoal || e.TypeID == eventPenalty) {
+		class = assistClassBySubType[*e.SubTypeID]
+	}
 	switch e.TypeID {
 	case eventGoal:
 		kind = domain.EventGoal
@@ -307,6 +318,7 @@ func convertEvent(e smEvent, teamOf map[string]domain.TeamID) (domain.Event, boo
 	return domain.Event{
 		Minute: minute, Kind: kind, Team: team,
 		Player: domain.PlayerID(player), Related: domain.PlayerID(related),
+		AssistClass: class,
 	}, true, nil
 }
 

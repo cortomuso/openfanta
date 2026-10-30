@@ -401,3 +401,56 @@ func TestCleanSheetEligibility(t *testing.T) {
 		})
 	}
 }
+
+func TestAssistClasses(t *testing.T) {
+	rules := classic(t)
+	events := map[string]settings.Event{}
+	for id, e := range rules.Events {
+		events[id] = e
+	}
+	half, tenth := d.Points(50), d.Points(10)
+	events[settings.EventAssistSet] = settings.Event{Value: &half}
+	events[settings.EventAssistContr] = settings.Event{Value: &tenth}
+	rules.Events = events
+
+	line := outfield("p", func(l *d.PlayerLine) { l.Assists, l.AssistsSetPiece, l.AssistsContribution = 4, 1, 2 })
+	s := Compute([]d.PlayerLine{line}, map[d.PlayerID]d.Points{"p": 600}, rules)[0]
+	want := []BreakdownItem{item(Assist, 1, 100), item(AssistSetPiece, 1, 50), item(AssistContrib, 2, 20)}
+	if !reflect.DeepEqual(s.Breakdown, want) {
+		t.Errorf("breakdown = %+v, want %+v", s.Breakdown, want)
+	}
+	if *s.Fantavoto != 770 {
+		t.Errorf("fantavoto = %s, want 7.70", s.Fantavoto)
+	}
+
+	t.Run("a class without a value scores nothing", func(t *testing.T) {
+		s := Compute([]d.PlayerLine{line}, map[d.PlayerID]d.Points{"p": 600}, classic(t))[0]
+		for _, b := range s.Breakdown {
+			if b.Code == AssistContrib && b.Points != 0 {
+				t.Errorf("contribution scored %s without a configured value", b.Points)
+			}
+		}
+	})
+
+	t.Run("senza voto rules see each class separately", func(t *testing.T) {
+		sv := func(id string) settings.Player {
+			p := classic(t)
+			p.SenzaVoto.WithOtherEvents = &struct {
+				Base   d.Points `json:"base"`
+				Events []string `json:"events"`
+			}{Base: 600, Events: []string{id}}
+			return p
+		}
+		setPiece := outfield("p", func(l *d.PlayerLine) { l.Minutes, l.Assists, l.AssistsSetPiece = 5, 1, 1 })
+		if s := Compute([]d.PlayerLine{setPiece}, nil, sv(settings.EventAssistSet))[0]; s.SenzaVoto {
+			t.Error("set-piece assist listed: expected a voto d'ufficio")
+		}
+		if s := Compute([]d.PlayerLine{setPiece}, nil, sv(settings.EventAssist))[0]; !s.SenzaVoto {
+			t.Error("only open-play assists listed: a set-piece assist must not count")
+		}
+		contrib := outfield("p", func(l *d.PlayerLine) { l.Minutes, l.Assists, l.AssistsContribution = 5, 1, 1 })
+		if s := Compute([]d.PlayerLine{contrib}, nil, sv(settings.EventAssistContr))[0]; s.SenzaVoto {
+			t.Error("contribution listed: expected a voto d'ufficio")
+		}
+	})
+}

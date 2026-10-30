@@ -13,6 +13,8 @@ const (
 	EventGoal         = "goal"
 	EventPenaltyGoal  = "penalty_goal"
 	EventAssist       = "assist.open_play"
+	EventAssistSet    = "assist.set_piece"
+	EventAssistContr  = "assist.contribution"
 	EventYellow       = "yellow"
 	EventRed          = "red"
 	EventOwnGoal      = "own_goal"

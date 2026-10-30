@@ -318,14 +318,16 @@ components:
     PlayerMatchStats:
       type: object
       description: What the player did in the match, as derived from provider events. Shoot-outs never count.
-      required: [goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, clean_sheet]
+      required: [goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, clean_sheet, assists_set_piece, assists_contribution]
       properties:
         goals: { type: integer, minimum: 0, description: "Goals scored, excluding penalties" }
         penalties_scored: { type: integer, minimum: 0 }
         penalties_missed: { type: integer, minimum: 0, description: "Penalties taken and not scored, including those saved by the keeper" }
         penalties_saved: { type: integer, minimum: 0, description: "Penalties saved, as the goalkeeper" }
         own_goals: { type: integer, minimum: 0 }
-        assists: { type: integer, minimum: 0 }
+        assists: { type: integer, minimum: 0, description: "Every assist class together" }
+        assists_set_piece: { type: integer, minimum: 0, description: "Assists that came from a set piece. Part of assists; the rest are open play" }
+        assists_contribution: { type: integer, minimum: 0, description: "Contributions to a goal that were not judged assists. Part of assists" }
         yellow_cards: { type: integer, minimum: 0, description: "Includes a second yellow" }
         sent_off: { type: boolean, description: "Sent off by a straight red or a second yellow" }
         goals_conceded: { type: integer, minimum: 0, description: "Goals the player's team conceded while the player was on the pitch, own goals included" }

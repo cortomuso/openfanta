@@ -26,8 +26,9 @@ fantavoto = voto + Σ (count × value)   for every event with a value
 The result carries a breakdown with one entry per event, so every number can be audited. The mapping from document keys to breakdown codes is `value` in [`internal/engine/engine.go`](https://github.com/cortomuso/openfanta/blob/main/internal/engine/engine.go).
 Today the engine understands the per-event values, `player.cards.red_replaces_yellow`,
 `clean_sheet.min_minutes` and `player.senza_voto`. It does not tell defenders, midfielders and
-attackers apart yet, so only a `P` (goalkeeper) entry under `by_role` has an effect, and every
-assist uses `assist.open_play`.
+attackers apart yet, so only a `P` (goalkeeper) entry under `by_role` has an effect.
+
+Assists are scored by class: `assist.open_play` (breakdown code `assist`), `assist.set_piece` (`assist_set_piece`) and `assist.contribution` (`assist_contribution`). A class with no value in the document scores nothing. The provider decides which class an assist belongs to; see the mapping in [`internal/provider/sportmonks/parse.go`](https://github.com/cortomuso/openfanta/blob/main/internal/provider/sportmonks/parse.go). Today every assist is open play, because the Sportmonks sub types for set-piece goals are not verified yet.
 
 The clean-sheet bonus goes to a goalkeeper who played, whose team conceded nothing while they were on the pitch, who has a real voto (not a voto d'ufficio), and who played at least `clean_sheet.min_minutes`.
 

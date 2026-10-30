@@ -185,26 +185,28 @@ func (q *Queries) InsertLeague(ctx context.Context, arg InsertLeagueParams) erro
 }
 
 type InsertPlayerScoresParams struct {
-	RunID           uuid.UUID
-	PlayerID        uuid.UUID
-	TeamID          uuid.UUID
-	Role            string
-	Minutes         int32
-	Voto            *int32
-	Fantavoto       *int32
-	SenzaVoto       bool
-	VotoUfficio     bool
-	Breakdown       []byte
-	Goals           int32
-	PenaltiesScored int32
-	PenaltiesMissed int32
-	PenaltiesSaved  int32
-	OwnGoals        int32
-	Assists         int32
-	YellowCards     int32
-	SentOff         bool
-	GoalsConceded   int32
-	CleanSheet      bool
+	RunID               uuid.UUID
+	PlayerID            uuid.UUID
+	TeamID              uuid.UUID
+	Role                string
+	Minutes             int32
+	Voto                *int32
+	Fantavoto           *int32
+	SenzaVoto           bool
+	VotoUfficio         bool
+	Breakdown           []byte
+	Goals               int32
+	PenaltiesScored     int32
+	PenaltiesMissed     int32
+	PenaltiesSaved      int32
+	OwnGoals            int32
+	Assists             int32
+	YellowCards         int32
+	SentOff             bool
+	GoalsConceded       int32
+	CleanSheet          bool
+	AssistsSetPiece     int32
+	AssistsContribution int32
 }
 
 const insertRawPayload = `-- name: InsertRawPayload :one

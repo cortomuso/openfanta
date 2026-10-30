@@ -33,6 +33,22 @@ const (
 	EventRedCard       EventKind = "red_card"      // A straight red.
 )
 
+// AssistClass says what kind of assist a goal's Related player made. The zero
+// value is an open-play assist.
+type AssistClass string
+
+// Assist classes.
+const (
+	AssistOpenPlay     AssistClass = ""             // the default: not a set piece, not a mere contribution
+	AssistSetPiece     AssistClass = "set_piece"    // the pass came from a free kick, corner or throw-in
+	AssistContribution AssistClass = "contribution" // a pass that helped the goal but was not judged an assist
+)
+
+// Valid reports whether c is a known class.
+func (c AssistClass) Valid() bool {
+	return c == AssistOpenPlay || c == AssistSetPiece || c == AssistContribution
+}
+
 // Event is one match event. Events are ordered by Seq, which must be unique in
 // a match; Minute is only used to measure minutes played.
 type Event struct {
@@ -42,6 +58,8 @@ type Event struct {
 	Team    TeamID    `json:"team"`
 	Player  PlayerID  `json:"player"`
 	Related PlayerID  `json:"related,omitempty"`
+	// AssistClass classifies the assist by Related on a goal or penalty goal.
+	AssistClass AssistClass `json:"assist_class,omitempty"`
 }
 
 // Appearance lists a player in a matchday squad. Bench players who never come
@@ -78,10 +96,14 @@ type PlayerLine struct {
 	PenaltiesMissed int      `json:"penalties_missed"` // missed or saved, as the taker
 	PenaltiesSaved  int      `json:"penalties_saved"`  // as the goalkeeper
 	OwnGoals        int      `json:"own_goals"`
-	Assists         int      `json:"assists"`
-	YellowCards     int      `json:"yellow_cards"`
-	SentOff         bool     `json:"sent_off"`
-	GoalsConceded   int      `json:"goals_conceded"` // by the player's team while they were on the pitch
+	Assists         int      `json:"assists"` // every class together
+	// AssistsSetPiece and AssistsContribution are the parts of Assists of
+	// those classes; the rest are open-play assists.
+	AssistsSetPiece     int  `json:"assists_set_piece"`
+	AssistsContribution int  `json:"assists_contribution"`
+	YellowCards         int  `json:"yellow_cards"`
+	SentOff             bool `json:"sent_off"`
+	GoalsConceded       int  `json:"goals_conceded"` // by the player's team while they were on the pitch
 }
 
 // CleanSheet reports whether a goalkeeper played and their team conceded no

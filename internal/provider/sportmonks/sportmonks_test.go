@@ -317,3 +317,30 @@ func TestParseDropsRescindedEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestAssistClassMapping(t *testing.T) {
+	const head = `{"data":{"id":1,"participants":[{"id":1,"meta":{"location":"home"}},{"id":2,"meta":{"location":"away"}}],
+		"lineups":[{"player_id":5,"team_id":1,"type_id":11},{"player_id":6,"team_id":1,"type_id":11}],"events":[`
+	parse := func(subType string) d.Event {
+		t.Helper()
+		body := head + `{"id":1,"type_id":14,` + subType + `"player_id":5,"related_player_id":6,"team_id":1,"minute":10}]}}`
+		f, err := ParseFixture(provider.Raw{Key: "goal", Body: []byte(body)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f.Facts.Events[0]
+	}
+	if got := parse(`"sub_type_id":777,`).AssistClass; got != d.AssistOpenPlay {
+		t.Errorf("unlisted sub type: class %q, want open play", got)
+	}
+	if got := parse("").AssistClass; got != d.AssistOpenPlay {
+		t.Errorf("no sub type: class %q, want open play", got)
+	}
+	// The real mapping is unverified (see assistClassBySubType), so this only
+	// checks the mechanism with an invented sub type.
+	assistClassBySubType[777] = d.AssistSetPiece
+	t.Cleanup(func() { delete(assistClassBySubType, 777) })
+	if got := parse(`"sub_type_id":777,`).AssistClass; got != d.AssistSetPiece {
+		t.Errorf("listed sub type: class %q, want set piece", got)
+	}
+}

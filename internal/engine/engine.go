@@ -23,7 +23,9 @@ const (
 	PenaltyMissed  Code = "penalty_missed"
 	PenaltySaved   Code = "penalty_saved"
 	OwnGoal        Code = "own_goal"
-	Assist         Code = "assist"
+	Assist         Code = "assist" // open play; the set-piece and contribution classes have their own codes
+	AssistSetPiece Code = "assist_set_piece"
+	AssistContrib  Code = "assist_contribution"
 	YellowCard     Code = "yellow_card"
 	RedCard        Code = "red_card"
 	GKGoalConceded Code = "gk_goal_conceded"
@@ -33,12 +35,11 @@ const (
 // AllScoreCodes lists every scoring code in a stable order.
 var AllScoreCodes = []Code{
 	Goal, PenaltyScored, PenaltyMissed, PenaltySaved, OwnGoal,
-	Assist, YellowCard, RedCard, GKGoalConceded, GKCleanSheet,
+	Assist, AssistSetPiece, AssistContrib, YellowCard, RedCard, GKGoalConceded, GKCleanSheet,
 }
 
 // value returns what one occurrence of code is worth to a player of the given
-// role. Assists use assist.open_play for now: the facts do not say whether an
-// assist came from a set piece.
+// role.
 func value(p settings.Player, code Code, role d.Role) d.Points {
 	switch code {
 	case Goal:
@@ -53,6 +54,10 @@ func value(p settings.Player, code Code, role d.Role) d.Points {
 		return p.Points(settings.EventOwnGoal, role)
 	case Assist:
 		return p.Points(settings.EventAssist, role)
+	case AssistSetPiece:
+		return p.Points(settings.EventAssistSet, role)
+	case AssistContrib:
+		return p.Points(settings.EventAssistContr, role)
 	case YellowCard:
 		return p.Points(settings.EventYellow, role)
 	case RedCard:
@@ -73,13 +78,14 @@ var eventCode = map[string]Code{
 	settings.EventPenaltyMiss:  PenaltyMissed,
 	settings.EventOwnGoal:      OwnGoal,
 	settings.EventAssist:       Assist,
-	"assist.set_piece":         Assist,
+	settings.EventAssistSet:    AssistSetPiece,
+	settings.EventAssistContr:  AssistContrib,
 	settings.EventYellow:       YellowCard,
 }
 
 // Version identifies the engine's scoring semantics. Bump it whenever a change
 // can alter results for the same input; it is recorded on every computation run.
-const Version = "2"
+const Version = "3"
 
 // BreakdownItem is one bonus or malus applied to a player.
 type BreakdownItem struct {
@@ -170,13 +176,15 @@ func votoUfficio(sv settings.SenzaVoto, events map[Code]int) (d.Points, bool) {
 // option is applied. Voto d'ufficio rules match against these raw counts.
 func eventCounts(l d.PlayerLine) map[Code]int {
 	c := map[Code]int{
-		Goal:          l.Goals,
-		PenaltyScored: l.PenaltiesScored,
-		PenaltyMissed: l.PenaltiesMissed,
-		PenaltySaved:  l.PenaltiesSaved,
-		OwnGoal:       l.OwnGoals,
-		Assist:        l.Assists,
-		YellowCard:    l.YellowCards,
+		Goal:           l.Goals,
+		PenaltyScored:  l.PenaltiesScored,
+		PenaltyMissed:  l.PenaltiesMissed,
+		PenaltySaved:   l.PenaltiesSaved,
+		OwnGoal:        l.OwnGoals,
+		Assist:         l.Assists - l.AssistsSetPiece - l.AssistsContribution,
+		AssistSetPiece: l.AssistsSetPiece,
+		AssistContrib:  l.AssistsContribution,
+		YellowCard:     l.YellowCards,
 	}
 	if l.SentOff {
 		c[RedCard] = 1
