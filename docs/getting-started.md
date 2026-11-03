@@ -32,6 +32,8 @@ and fill it in.
 | `OPENFANTA_LOG_LEVEL` / `OPENFANTA_LOG_FORMAT` | `info` / `json` | Structured logging (`text` for humans) |
 | `OPENFANTA_SHUTDOWN_TIMEOUT` | `15s` | How long to drain in-flight requests on SIGTERM |
 | `OPENFANTA_MIGRATE_ON_STARTUP` | `false` | Apply migrations before `serve`/`ingest` |
+| `OPENFANTA_VOTO_SOURCES` | all three | Comma separated voto sources every fixture is scored with: `provider-rating`, `openfanta-stat`, `average` |
+| `OPENFANTA_VOTO_AVERAGE_OF` | `provider-rating,openfanta-stat` | The sources `average` takes the mean of (see [voto sources](guides/voto-sources.md)) |
 
 ### With Docker
 
