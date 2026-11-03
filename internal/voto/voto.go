@@ -11,7 +11,7 @@ import (
 
 	"github.com/openfanta/openfanta/internal/domain"
 	"github.com/openfanta/openfanta/internal/settings"
-	"github.com/openfanta/openfanta/internal/timeline"
+	"github.com/openfanta/openfanta/internal/voto/openstat"
 )
 
 // Source provides base voti for the players of a match. A player missing from
@@ -60,87 +60,37 @@ func (ProviderRating) Votes(_ context.Context, facts domain.MatchFacts) (map[dom
 	return out, nil
 }
 
-// Statistical derives a voto from the match alone, without any rating: every
-// player who took the pitch starts from a 6, plus or minus a quarter point
-// for their team winning or losing. Goals, cards and the rest are scored by
-// the league's event values, so they are not counted twice here. Because it
-// needs nothing but the facts, it covers players the provider did not rate.
-type Statistical struct{}
+// OpenFantaStat is OpenFanta's own statistical rating (see package openstat):
+// events, per-player statistics and the team result, weighed by position and
+// scaled by minutes played. It never looks at the provider's rating. A player
+// the provider sent no statistics for gets no voto.
+type OpenFantaStat struct{ model openstat.Model }
 
-// Statistical voto parameters, in hundredths.
-const (
-	statBase       domain.Points = 600
-	statResultStep domain.Points = 25
-)
-
-// NewStatistical returns the statistical source.
-func NewStatistical() Statistical { return Statistical{} }
+// NewOpenFantaStat returns the source with the embedded v1 parameters.
+func NewOpenFantaStat() OpenFantaStat { return OpenFantaStat{model: openstat.Default()} }
 
 // Name implements Source.
-func (Statistical) Name() string { return settings.SourceOpenFantaStat }
+func (OpenFantaStat) Name() string { return settings.SourceOpenFantaStat }
 
-// Version implements Source.
-func (Statistical) Version() string { return "placeholder" }
+// Version implements Source: the version of the parameters.
+func (o OpenFantaStat) Version() string { return o.model.Version() }
 
 // Description implements Source.
-func (Statistical) Description() string {
-	return "A 6 for every player who played, plus or minus 0.25 when their team won or lost; needs no provider rating."
+func (OpenFantaStat) Description() string {
+	return "OpenFanta's own rating from match events, player statistics and the team result; independent of the provider's rating."
 }
 
-// Votes implements Source. A player who never took the pitch gets no voto.
-func (Statistical) Votes(_ context.Context, facts domain.MatchFacts) (map[domain.PlayerID]domain.Points, error) {
-	lines, err := timeline.Derive(facts)
+// Votes implements Source.
+func (o OpenFantaStat) Votes(_ context.Context, facts domain.MatchFacts) (map[domain.PlayerID]domain.Points, error) {
+	ratings, err := o.model.Rate(facts)
 	if err != nil {
 		return nil, err
 	}
-	home, away := score(facts)
-	out := make(map[domain.PlayerID]domain.Points, len(lines))
-	for _, l := range lines {
-		if l.Minutes <= 0 {
-			continue
-		}
-		var diff int
-		switch l.Team {
-		case facts.HomeTeam:
-			diff = home - away
-		case facts.AwayTeam:
-			diff = away - home
-		}
-		v := statBase
-		switch {
-		case diff > 0:
-			v += statResultStep
-		case diff < 0:
-			v -= statResultStep
-		}
-		out[l.Player] = v
+	out := make(map[domain.PlayerID]domain.Points, len(ratings))
+	for id, r := range ratings {
+		out[id] = r.Voto
 	}
 	return out, nil
-}
-
-// score counts the goals of each side from the regulation events.
-func score(f domain.MatchFacts) (home, away int) {
-	credit := func(team domain.TeamID) {
-		switch team {
-		case f.HomeTeam:
-			home++
-		case f.AwayTeam:
-			away++
-		}
-	}
-	for _, e := range f.Events {
-		switch e.Kind {
-		case domain.EventGoal, domain.EventPenaltyGoal:
-			credit(e.Team)
-		case domain.EventOwnGoal: // the event's team is the scorer's; the other side gets the goal
-			if e.Team == f.HomeTeam {
-				credit(f.AwayTeam)
-			} else {
-				credit(f.HomeTeam)
-			}
-		}
-	}
-	return home, away
 }
 
 // Average is the mean of its child sources, which pulls an outlier rating
@@ -239,7 +189,7 @@ func Build(names, averageOf []string) ([]Source, error) {
 		case settings.SourceProviderRating:
 			return NewProviderRating(), nil
 		case settings.SourceOpenFantaStat:
-			return NewStatistical(), nil
+			return NewOpenFantaStat(), nil
 		case settings.SourceAverage:
 			return nil, fmt.Errorf("%s cannot be a child of %s", name, settings.SourceAverage)
 		}
