@@ -79,6 +79,54 @@
             "data": {
               "value": 90
             }
+          },
+          {
+            "id": 10013,
+            "player_id": 1001,
+            "type_id": 57,
+            "data": {
+              "value": 4
+            }
+          },
+          {
+            "id": 10014,
+            "player_id": 1001,
+            "type_id": 104,
+            "data": {
+              "value": 3
+            }
+          },
+          {
+            "id": 10015,
+            "player_id": 1001,
+            "type_id": 103,
+            "data": {
+              "value": 1
+            }
+          },
+          {
+            "id": 10016,
+            "player_id": 1001,
+            "type_id": 80,
+            "data": {
+              "value": 28
+            }
+          },
+          {
+            "id": 10017,
+            "player_id": 1001,
+            "type_id": 116,
+            "data": {
+              "value": 20
+            }
+          },
+          {
+            "id": 10018,
+            "player_id": 1001,
+            "type_id": 27271,
+            "data": {
+              "value": 2
+            }
           }
         ]
       },
@@ -109,6 +157,94 @@
             "type_id": 119,
             "data": {
               "value": 90
+            }
+          },
+          {
+            "id": 10023,
+            "player_id": 1002,
+            "type_id": 86,
+            "data": {
+              "value": 3
+            }
+          },
+          {
+            "id": 10024,
+            "player_id": 1002,
+            "type_id": 41,
+            "data": {
+              "value": 2
+            }
+          },
+          {
+            "id": 10025,
+            "player_id": 1002,
+            "type_id": 117,
+            "data": {
+              "value": 2
+            }
+          },
+          {
+            "id": 10026,
+            "player_id": 1002,
+            "type_id": 80,
+            "data": {
+              "value": 22
+            }
+          },
+          {
+            "id": 10027,
+            "player_id": 1002,
+            "type_id": 116,
+            "data": {
+              "value": 19
+            }
+          },
+          {
+            "id": 10028,
+            "player_id": 1002,
+            "type_id": 108,
+            "data": {
+              "value": 5
+            }
+          },
+          {
+            "id": 10029,
+            "player_id": 1002,
+            "type_id": 109,
+            "data": {
+              "value": 3
+            }
+          },
+          {
+            "id": 10030,
+            "player_id": 1002,
+            "type_id": 94,
+            "data": {
+              "value": 2
+            }
+          },
+          {
+            "id": 10031,
+            "player_id": 1002,
+            "type_id": 105,
+            "data": {
+              "value": 12
+            }
+          },
+          {
+            "id": 10032,
+            "player_id": 1002,
+            "type_id": 106,
+            "data": {
+              "value": 6
+            }
+          },
+          {
+            "id": 10033,
+            "player_id": 1002,
+            "type_id": 115,
+            "data": {
+              "value": 0
             }
           }
         ]
@@ -172,6 +308,30 @@
             "data": {
               "value": 90
             }
+          },
+          {
+            "id": 10043,
+            "player_id": 1004,
+            "type_id": 9706,
+            "data": {
+              "value": 1
+            }
+          },
+          {
+            "id": 10044,
+            "player_id": 1004,
+            "type_id": 27273,
+            "data": {
+              "value": 6
+            }
+          },
+          {
+            "id": 10045,
+            "player_id": 1004,
+            "type_id": 86,
+            "data": {
+              "value": 1
+            }
           }
         ]
       },
@@ -202,6 +362,78 @@
             "type_id": 119,
             "data": {
               "value": 88
+            }
+          },
+          {
+            "id": 10053,
+            "player_id": 1005,
+            "type_id": 101,
+            "data": {
+              "value": 9
+            }
+          },
+          {
+            "id": 10054,
+            "player_id": 1005,
+            "type_id": 100,
+            "data": {
+              "value": 3
+            }
+          },
+          {
+            "id": 10055,
+            "player_id": 1005,
+            "type_id": 78,
+            "data": {
+              "value": 4
+            }
+          },
+          {
+            "id": 10056,
+            "player_id": 1005,
+            "type_id": 27267,
+            "data": {
+              "value": 3
+            }
+          },
+          {
+            "id": 10057,
+            "player_id": 1005,
+            "type_id": 107,
+            "data": {
+              "value": 5
+            }
+          },
+          {
+            "id": 10058,
+            "player_id": 1005,
+            "type_id": 27266,
+            "data": {
+              "value": 2
+            }
+          },
+          {
+            "id": 10059,
+            "player_id": 1005,
+            "type_id": 80,
+            "data": {
+              "value": 44
+            }
+          },
+          {
+            "id": 10060,
+            "player_id": 1005,
+            "type_id": 116,
+            "data": {
+              "value": 40
+            }
+          },
+          {
+            "id": 10061,
+            "player_id": 1005,
+            "type_id": 56,
+            "data": {
+              "value": 2
             }
           }
         ]
@@ -340,6 +572,46 @@
             "type_id": 119,
             "data": {
               "value": 90
+            }
+          },
+          {
+            "id": 20033,
+            "player_id": 2003,
+            "type_id": 117,
+            "data": {
+              "value": "1"
+            }
+          },
+          {
+            "id": 20034,
+            "player_id": 2003,
+            "type_id": 86,
+            "data": {
+              "value": 2
+            }
+          },
+          {
+            "id": 20035,
+            "player_id": 2003,
+            "type_id": 41,
+            "data": {
+              "value": 1
+            }
+          },
+          {
+            "id": 20036,
+            "player_id": 2003,
+            "type_id": 56,
+            "data": {
+              "value": 3
+            }
+          },
+          {
+            "id": 20037,
+            "player_id": 2003,
+            "type_id": 96,
+            "data": {
+              "value": 4
             }
           }
         ]
