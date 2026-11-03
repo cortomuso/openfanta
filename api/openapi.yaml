@@ -24,6 +24,7 @@ tags:
   - name: scores
   - name: catalog
   - name: settings
+  - name: leagues
 paths:
   /healthz:
     get:
@@ -78,6 +79,41 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VotoSourceList" }
+
+  /v1/leagues/{leagueId}/matchdays/{number}/exceptions:
+    put:
+      tags: [leagues]
+      operationId: putMatchdayExceptions
+      summary: Override the real-match policy for fixtures of a matchday
+      description: |
+        League admins only. For a postponed or suspended real match (or one played outside its
+        round window) the league's `real_match` settings say whether its players wait for real
+        voti or get an automatic voto. An override replaces that policy for one fixture of this
+        matchday; the body lists all overrides of the matchday, so an empty list clears them.
+        The policy is applied when the matchday closes and shows in the explain trace.
+
+        **Not served yet:** it needs authentication and league membership (M2) and the matchday
+        lifecycle, so for now it answers 501.
+      parameters:
+        - { name: leagueId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: number, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MatchdayExceptions" }
+      responses:
+        "200":
+          description: The overrides now in force for the matchday.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MatchdayExceptions" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "501":
+          $ref: "#/components/responses/Problem"
 
   /v1/seasons:
     get:
@@ -238,6 +274,28 @@ components:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
   schemas:
+    MatchdayExceptions:
+      type: object
+      required: [overrides]
+      properties:
+        overrides:
+          type: array
+          items: { $ref: "#/components/schemas/ExceptionOverride" }
+    ExceptionOverride:
+      type: object
+      required: [fixture_id, policy]
+      properties:
+        fixture_id: { type: string, format: uuid }
+        policy:
+          type: string
+          enum: [wait, automatic_voto]
+          description: "`wait` leaves the players without a voto until the match is played; `automatic_voto` gives everyone involved the voto."
+        voto:
+          type: string
+          pattern: '^(10(\.00)?|[0-9](\.[0-9]{2})?)$'
+          nullable: true
+          description: The automatic voto, as a two-decimal string. Omit to use the league's `real_match.automatic_voto`.
+          example: "6.00"
     VotoSourceList:
       type: object
       required: [default, sources]
@@ -297,6 +355,11 @@ components:
         matchday: { type: integer }
         kickoff: { type: string, format: date-time, nullable: true }
         status: { type: string, description: "Provider status, e.g. FT" }
+        exception:
+          type: string
+          enum: [postponed, suspended]
+          nullable: true
+          description: Set when the real match was postponed or suspended; the league's real-match policy applies to it.
         home: { $ref: "#/components/schemas/Ref" }
         away: { $ref: "#/components/schemas/Ref" }
     Matchday:

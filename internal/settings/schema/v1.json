@@ -40,6 +40,15 @@
       },
       "additionalProperties": false
     },
+    "real_match": {
+      "type": "object",
+      "properties": {
+        "on_postponed": { "enum": ["wait", "automatic_voto"] },
+        "on_suspended": { "enum": ["wait", "automatic_voto"] },
+        "automatic_voto": { "$ref": "#/$defs/voto" }
+      },
+      "additionalProperties": false
+    },
     "team": {
       "type": "array",
       "items": {

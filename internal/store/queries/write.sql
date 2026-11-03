@@ -31,11 +31,12 @@ INSERT INTO players (id, name) VALUES ($1, $2)
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
 
 -- name: UpsertFixture :exec
-INSERT INTO fixtures (id, matchday_id, home_team_id, away_team_id, kickoff, status)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO fixtures (id, matchday_id, home_team_id, away_team_id, kickoff, status, exception)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (id) DO UPDATE SET
     matchday_id = EXCLUDED.matchday_id, home_team_id = EXCLUDED.home_team_id,
-    away_team_id = EXCLUDED.away_team_id, kickoff = EXCLUDED.kickoff, status = EXCLUDED.status;
+    away_team_id = EXCLUDED.away_team_id, kickoff = EXCLUDED.kickoff, status = EXCLUDED.status,
+    exception = EXCLUDED.exception;
 
 -- name: InsertRawPayload :one
 INSERT INTO raw_payloads (provider, request_key, sha256, http_status, body, fetched_at, last_seen_at)

@@ -81,6 +81,7 @@ type Fixture struct {
 	AwayTeamID uuid.UUID
 	Kickoff    *time.Time
 	Status     string
+	Exception  string
 }
 
 type FixtureFact struct {

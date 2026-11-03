@@ -210,6 +210,41 @@ func TestLiveFixtureIsNotScoredUntilFinal(t *testing.T) {
 	}
 }
 
+func TestPostponedAndSuspendedFixturesAreRecordedAndNotScored(t *testing.T) {
+	for state, want := range map[string]string{"POSTPONED": "postponed", "SUSPENDED": "suspended", "ABANDONED": "suspended"} {
+		st, _ := storetest.New(t)
+		up, srv := smtest.New(t)
+		ft := smtest.Fixture(t, "fixture_5001_ft.json")
+		up.Set("/fixtures/5001", strings.Replace(ft, `"developer_name": "FT"`, `"developer_name": "`+state+`"`, 1))
+		svc := newService(t, st, srv, nil)
+
+		rep, err := svc.IngestMatchday(ctx, "777", 1, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fr FixtureReport
+		for _, f := range rep.Fixtures {
+			if f.Ref == "5001" {
+				fr = f
+			}
+		}
+		if fr.Err != nil || fr.Final || fr.RunsCreated != 0 || fr.Status != state {
+			t.Fatalf("%s: report = %+v", state, fr)
+		}
+		row, err := st.Queries().GetFixture(ctx, fr.ID)
+		if err != nil || row.Exception != want {
+			t.Fatalf("%s: stored exception = %q, %v; want %q", state, row.Exception, err, want)
+		}
+
+		// Played after all: the exception clears and the match is scored.
+		up.Set("/fixtures/5001", ft)
+		rep, _ = svc.IngestMatchday(ctx, "777", 1, Options{})
+		if row, _ = st.Queries().GetFixture(ctx, fr.ID); row.Exception != "" {
+			t.Errorf("%s: exception after the match was played = %q", state, row.Exception)
+		}
+	}
+}
+
 func TestRecomputeWithNewRuleSetVersion(t *testing.T) {
 	st, _ := storetest.New(t)
 	_, srv := smtest.New(t)

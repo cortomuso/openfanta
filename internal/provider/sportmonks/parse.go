@@ -15,7 +15,7 @@ import (
 
 // parserVersion must change whenever parsing can produce different output
 // from the same payload.
-const parserVersion = "4"
+const parserVersion = "5"
 
 // ErrParse wraps every parsing failure.
 var ErrParse = errors.New("sportmonks: cannot parse payload")
@@ -94,6 +94,17 @@ var statTypes = map[int]domain.StatKey{
 
 // Fixture states after which a match is over.
 var finalStates = map[string]bool{"FT": true, "AET": true, "FT_PEN": true}
+
+// exceptionStates maps the states of a match that did not go the usual way.
+// A match stopped part-way (suspended, interrupted, abandoned) can be resumed
+// or replayed, so all three are suspensions. Cancelled, walk-over and awarded
+// matches are not covered by the real-match policy.
+var exceptionStates = map[string]domain.Exception{
+	"POSTPONED":   domain.ExceptionPostponed,
+	"SUSPENDED":   domain.ExceptionSuspended,
+	"INTERRUPTED": domain.ExceptionSuspended,
+	"ABANDONED":   domain.ExceptionSuspended,
+}
 
 type id = json.Number // Sportmonks IDs are integers; keep them as exact strings
 
@@ -228,10 +239,11 @@ func ParseFixture(r provider.Raw) (provider.Fixture, error) {
 	}
 
 	out := provider.Fixture{
-		Ref:     f.ID.String(),
-		Status:  f.State.DeveloperName,
-		Final:   finalStates[f.State.DeveloperName],
-		Players: map[string]string{},
+		Ref:       f.ID.String(),
+		Status:    f.State.DeveloperName,
+		Final:     finalStates[f.State.DeveloperName],
+		Players:   map[string]string{},
+		Exception: exceptionStates[f.State.DeveloperName],
 	}
 	if f.StartingAt != nil {
 		t, err := time.Parse(time.DateTime, *f.StartingAt) // Sportmonks returns UTC
