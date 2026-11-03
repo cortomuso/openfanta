@@ -26,7 +26,7 @@ The `voto` section (schema 1.2 or later) says where the base voti come from and 
 - `source`: `provider-rating`, `openfanta-stat` or `average`; `GET /v1/voto-sources` lists them with a version and a description. Ingest scores every fixture with every source, one run each, so the choice only decides which run a league reads.
 - `rounding.mode`: `none`, `nearest` (halves away from zero), `up` or `down`. `step` is in hundredths, 50 for halves and 100 for whole points; `none` takes no step.
 
-Rounding applies to the source's voto only. A voto d'ufficio from `senza_voto` and the event points are not rounded. The code is [`internal/settings/voto.go`](https://github.com/cortomuso/openfanta/blob/main/internal/settings/voto.go) and [`internal/voto/voto.go`](https://github.com/cortomuso/openfanta/blob/main/internal/voto/voto.go).
+The sources are explained in [the voto sources guide](guides/voto-sources.md). Rounding applies to the source's voto only. A voto d'ufficio from `senza_voto` and the event points are not rounded. The code is [`internal/settings/voto.go`](https://github.com/cortomuso/openfanta/blob/main/internal/settings/voto.go) and [`internal/voto/voto.go`](https://github.com/cortomuso/openfanta/blob/main/internal/voto/voto.go).
 
 ## How the player rules are applied
 
