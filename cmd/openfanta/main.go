@@ -26,7 +26,6 @@ import (
 	"github.com/openfanta/openfanta/internal/provider/sportmonks"
 	"github.com/openfanta/openfanta/internal/settings"
 	"github.com/openfanta/openfanta/internal/store"
-	"github.com/openfanta/openfanta/internal/voto"
 )
 
 const usage = `usage: openfanta <command> [flags]
@@ -118,7 +117,7 @@ func newService(ctx context.Context, cfg config.Config, log *slog.Logger, needPr
 		sm.BaseURL = cfg.SportmonksURL
 	}
 	svc := &ingest.Service{
-		Store: st, Provider: sm, Voto: voto.NewProviderRating(),
+		Store: st, Provider: sm,
 		Logger: log, Now: time.Now,
 	}
 	return svc, st.Close, nil

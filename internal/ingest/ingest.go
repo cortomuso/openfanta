@@ -39,7 +39,6 @@ type Service struct {
 	// Settings are the rules fixtures are scored under. Nil means the Classic
 	// default until per-league scoring exists.
 	Settings *settings.Settings
-	Voto     voto.Source
 	Logger   *slog.Logger
 	Now      func() time.Time
 }
@@ -242,18 +241,23 @@ func (s *Service) compute(ctx context.Context, f store.Facts, reason string) (in
 	if err != nil {
 		return 0, err
 	}
-	votes, err := s.Voto.Votes(ctx, f.Facts)
-	if err != nil {
-		return 0, fmt.Errorf("voto source %s: %w", s.Voto.Name(), err)
-	}
 	st := s.Settings
 	if st == nil {
 		st = settings.Classic()
 	}
+	src, err := voto.ByName(st.Doc.Voto.SourceName())
+	if err != nil {
+		return 0, err
+	}
+	votes, err := src.Votes(ctx, f.Facts)
+	if err != nil {
+		return 0, fmt.Errorf("voto source %s: %w", src.Name(), err)
+	}
+	votes = st.Doc.Voto.Rounding.ApplyAll(votes)
 	scores := engine.Compute(lines, votes, st.Doc.Player)
 	_, isNew, err := s.Store.RecordRun(ctx, store.RunInput{
-		FixtureID: f.FixtureID, FactsID: f.ID, Settings: st, VotoSource: s.Voto.Name(),
-		InputHash: inputHash(f.Hash, st, s.Voto.Name(), votes), Reason: reason, Scores: scores,
+		FixtureID: f.FixtureID, FactsID: f.ID, Settings: st, VotoSource: src.Name(),
+		InputHash: inputHash(f.Hash, st, src.Name(), votes), Reason: reason, Scores: scores,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("record run under settings %s: %w", st.SHA256, err)

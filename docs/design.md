@@ -73,8 +73,12 @@ Code: `internal/store/migrations/`, `store.RecordRun` in `internal/store/store.g
 ### 2.6 Voto source
 The engine never fetches voti; the shell resolves them and passes them in as data, so sources can
 be swapped (a CSV/manual source later) without touching the engine. Voto is the provider rating
-unrounded at two decimals; rounding is a league setting (§9).
-Code: `internal/voto/voto.go`, `parseRating` in `internal/provider/sportmonks/parse.go`.
+unrounded at two decimals by default; the source and the rounding are league settings (§9).
+Three sources exist: `provider-rating`, `statistical` (a 6 for everyone who played, ±0.25 for the
+team result, no rating needed) and `averaged` (mean of the two, none without a rating).
+`GET /v1/voto-sources` lists them. Rounding (`none`, `nearest`, `up`, `down`, to a step in hundredths)
+is applied to the source's voto in ingest, in integer arithmetic, before the engine runs.
+Code: `internal/voto/voto.go`, `settings.Rounding` in `internal/settings/voto.go`, `parseRating` in `internal/provider/sportmonks/parse.go`.
 
 ### 2.7 API style: REST + OpenAPI, spec-first
 `api/openapi.yaml` is the contract and the server is generated from it. It is OpenAPI **3.0.3**,
@@ -162,6 +166,7 @@ A full example document (a Classic league, and how Mantra fits the same structur
 
 - **2026-10-27: licence AGPL-3.0** (chosen by the owner).
 - **2026-10-27: base voto at two-decimal precision.** `voto` is the provider rating unrounded (`6.38`). Rounding moved from the voto source into league settings.
+- **2026-11-03: voto source and rounding live in the settings document** (`voto.source`, `voto.rounding`, schema 1.2), so they are part of the settings hash and a change is a new run. A document without `voto` is provider rating, unrounded, which keeps the Classic hash. Only the source's voto is rounded, never a voto d'ufficio. There is no editorial source: Sportmonks has none, so the second and third sources are derived from the match.
 - **2026-10-27: the server is the source of truth for leagues** and computes fantavoti from per-league settings (a brief proposal to compute fantavoti on clients was dropped, because members using different clients must get identical results).
 - **2026-10-27: no retroactive rule changes**; closed matchdays change only through logged owner/admin corrections; all inputs freeze at matchday close.
 - **2026-10-27: rounding is a league setting**; stage-1 results may be shared across leagues, pending a benchmark.

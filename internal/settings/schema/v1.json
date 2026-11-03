@@ -25,6 +25,21 @@
       },
       "additionalProperties": false
     },
+    "voto": {
+      "type": "object",
+      "properties": {
+        "source": { "enum": ["provider-rating", "statistical", "averaged"] },
+        "rounding": {
+          "type": "object",
+          "properties": {
+            "mode": { "enum": ["none", "nearest", "up", "down"] },
+            "step": { "type": "integer", "minimum": 2, "maximum": 100 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "team": {
       "type": "array",
       "items": {
