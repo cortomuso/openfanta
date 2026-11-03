@@ -74,8 +74,8 @@ Code: `internal/store/migrations/`, `store.RecordRun` in `internal/store/store.g
 The engine never fetches voti; the shell resolves them and passes them in as data, so sources can
 be swapped (a CSV/manual source later) without touching the engine. Voto is the provider rating
 unrounded at two decimals by default; the source and the rounding are league settings (§9).
-Three sources exist: `provider-rating`, `statistical` (a 6 for everyone who played, ±0.25 for the
-team result, no rating needed) and `averaged` (mean of the two, none without a rating).
+Three sources exist: `provider-rating`, `openfanta-stat` (a placeholder for now: a 6 for everyone who played, ±0.25 for the
+team result) and `average` (mean of its children, none when a child has no voto). Ingest scores each fixture with every configured source (`OPENFANTA_VOTO_SOURCES`, `OPENFANTA_VOTO_AVERAGE_OF`) and records the source's `Version()` on the run.
 `GET /v1/voto-sources` lists them. Rounding (`none`, `nearest`, `up`, `down`, to a step in hundredths)
 is applied to the source's voto in ingest, in integer arithmetic, before the engine runs.
 Code: `internal/voto/voto.go`, `settings.Rounding` in `internal/settings/voto.go`, `parseRating` in `internal/provider/sportmonks/parse.go`.

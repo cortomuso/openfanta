@@ -69,9 +69,9 @@ WHERE cr.fixture_id = $1 AND cr.settings_sha256 = $2 AND cr.voto_source = $3;
 
 -- name: InsertRun :exec
 INSERT INTO computation_runs (
-    id, fixture_id, fixture_facts_id, settings_sha256, voto_source,
+    id, fixture_id, fixture_facts_id, settings_sha256, voto_source, voto_source_version,
     engine_version, input_hash, supersedes_run_id, reason, created_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
 
 -- name: InsertPlayerScores :copyfrom
 INSERT INTO player_scores (

@@ -66,3 +66,24 @@ func TestInvalidValuesAreAllReported(t *testing.T) {
 		t.Error("zero requests per hour accepted")
 	}
 }
+
+func TestVotoSources(t *testing.T) {
+	c, err := Load(env(map[string]string{}))
+	if err != nil || len(c.VotoSources) != 0 || len(c.VotoAverageOf) != 0 {
+		t.Fatalf("defaults: %+v, %v", c, err)
+	}
+	c, err = Load(env(map[string]string{
+		"OPENFANTA_VOTO_SOURCES": " provider-rating, average ", "OPENFANTA_VOTO_AVERAGE_OF": "provider-rating,openfanta-stat",
+	}))
+	if err != nil || len(c.VotoSources) != 2 || c.VotoSources[1] != "average" {
+		t.Fatalf("overrides: %+v, %v", c, err)
+	}
+	for name, vars := range map[string]map[string]string{
+		"unknown source":    {"OPENFANTA_VOTO_SOURCES": "astrology"},
+		"average of itself": {"OPENFANTA_VOTO_SOURCES": "average", "OPENFANTA_VOTO_AVERAGE_OF": "average,provider-rating"},
+	} {
+		if _, err := Load(env(vars)); err == nil || !strings.Contains(err.Error(), "OPENFANTA_VOTO_") {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}

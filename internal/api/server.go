@@ -104,8 +104,8 @@ func (s *Server) GetDefaultSettings(_ context.Context, _ GetDefaultSettingsReque
 // ListVotoSources implements StrictServerInterface.
 func (s *Server) ListVotoSources(_ context.Context, _ ListVotoSourcesRequestObject) (ListVotoSourcesResponseObject, error) {
 	out := ListVotoSources200JSONResponse{Default: DefaultVotoSource}
-	for _, src := range voto.All() {
-		out.Sources = append(out.Sources, VotoSource{Name: src.Name(), Description: src.Description()})
+	for _, src := range voto.Default() {
+		out.Sources = append(out.Sources, VotoSource{Name: src.Name(), Version: src.Version(), Description: src.Description()})
 	}
 	return out, nil
 }

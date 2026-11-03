@@ -28,7 +28,7 @@
     "voto": {
       "type": "object",
       "properties": {
-        "source": { "enum": ["provider-rating", "statistical", "averaged"] },
+        "source": { "enum": ["provider-rating", "openfanta-stat", "average"] },
         "rounding": {
           "type": "object",
           "properties": {

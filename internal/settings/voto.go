@@ -11,12 +11,12 @@ import (
 // its tests check that the two lists agree.
 const (
 	SourceProviderRating = "provider-rating"
-	SourceStatistical    = "statistical"
-	SourceAveraged       = "averaged"
+	SourceOpenFantaStat  = "openfanta-stat"
+	SourceAverage        = "average"
 )
 
 // VotoSources lists the voto source names this build accepts.
-var VotoSources = []string{SourceProviderRating, SourceStatistical, SourceAveraged}
+var VotoSources = []string{SourceProviderRating, SourceOpenFantaStat, SourceAverage}
 
 // Rounding modes of a base voto.
 const (

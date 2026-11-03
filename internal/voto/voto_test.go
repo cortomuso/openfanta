@@ -63,33 +63,70 @@ func TestStatisticalUsesTheResult(t *testing.T) {
 	}
 }
 
-func TestAveragedNeedsARating(t *testing.T) {
-	got, err := NewAveraged().Votes(context.Background(), matchFacts())
+func TestAverageNeedsEveryChild(t *testing.T) {
+	avg, err := NewAverage(NewProviderRating(), NewStatistical())
 	if err != nil {
 		t.Fatal(err)
 	}
-	// h1: (700+625)/2 = 662.5 -> 663; a1: (551+575)/2 = 563.
+	got, err := avg.Votes(context.Background(), matchFacts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// h1: (700+625)/2 = 662.5 -> 663; a1: (551+575)/2 = 563; a2 has no rating.
 	want := map[d.PlayerID]d.Points{"h1": 663, "a1": 563}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("votes = %v, want %v", got, want)
 	}
+	if v := avg.Version(); v != "provider-rating@1+openfanta-stat@placeholder;min=all" {
+		t.Errorf("version = %s", v)
+	}
 }
 
-func TestRegistryMatchesTheSettingsSchema(t *testing.T) {
-	var names []string
-	for _, s := range All() {
-		names = append(names, s.Name())
-		if s.Description() == "" {
-			t.Errorf("%s has no description", s.Name())
+func TestDivRoundIsHalfAwayFromZero(t *testing.T) {
+	for _, c := range []struct{ a, b, want d.Points }{
+		{1325, 2, 663}, {1324, 2, 662}, {-1325, 2, -663}, {5, 2, 3}, {-5, 2, -3}, {4, 2, 2}, {10, 3, 3}, {11, 3, 4},
+	} {
+		if got := divRound(c.a, c.b); got != c.want {
+			t.Errorf("%d/%d = %d, want %d", c.a, c.b, got, c.want)
 		}
-		if got, err := ByName(s.Name()); err != nil || got.Name() != s.Name() {
-			t.Errorf("ByName(%s) = %v, %v", s.Name(), got, err)
+	}
+}
+
+func TestAverageRejectsBadChildren(t *testing.T) {
+	if _, err := NewAverage(NewProviderRating()); err == nil {
+		t.Error("one child accepted")
+	}
+	avg, _ := NewAverage(NewProviderRating(), NewStatistical())
+	if _, err := NewAverage(NewProviderRating(), avg); err == nil {
+		t.Error("average inside an average accepted")
+	}
+}
+
+func TestBuild(t *testing.T) {
+	var names []string
+	for _, s := range Default() {
+		names = append(names, s.Name())
+		if s.Description() == "" || s.Version() == "" {
+			t.Errorf("%s lacks description or version", s.Name())
 		}
 	}
 	if !slices.Equal(names, settings.VotoSources) {
-		t.Errorf("sources %v != settings.VotoSources %v", names, settings.VotoSources)
+		t.Errorf("default sources %v != settings.VotoSources %v", names, settings.VotoSources)
 	}
-	if _, err := ByName("nope"); err == nil {
-		t.Error("unknown source accepted")
+
+	only, err := Build([]string{"provider-rating"}, nil)
+	if err != nil || len(only) != 1 {
+		t.Fatalf("Build one = %v, %v", only, err)
+	}
+	for name, c := range map[string]struct{ names, of []string }{
+		"unknown source":    {[]string{"astrology"}, nil},
+		"duplicate":         {[]string{"provider-rating", "provider-rating"}, nil},
+		"average of itself": {[]string{"average"}, []string{"provider-rating", "average"}},
+		"unknown child":     {[]string{"average"}, []string{"provider-rating", "astrology"}},
+		"single child":      {[]string{"average"}, []string{"provider-rating"}},
+	} {
+		if _, err := Build(c.names, c.of); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 }

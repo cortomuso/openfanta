@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/openfanta/openfanta/internal/voto"
 )
 
 // Config holds every setting. Zero values are replaced by defaults in Load.
@@ -23,6 +25,8 @@ type Config struct {
 	LogFormat        string        // OPENFANTA_LOG_FORMAT: json or text (default json)
 	ShutdownTimeout  time.Duration // OPENFANTA_SHUTDOWN_TIMEOUT (default 15s)
 	MigrateOnStartup bool          // OPENFANTA_MIGRATE_ON_STARTUP (default false)
+	VotoSources      []string      // OPENFANTA_VOTO_SOURCES, comma separated (default: every source)
+	VotoAverageOf    []string      // OPENFANTA_VOTO_AVERAGE_OF, comma separated (default: provider-rating,openfanta-stat)
 }
 
 // Load reads the configuration from getenv (os.Getenv in production).
@@ -34,8 +38,13 @@ func Load(getenv func(string) string) (Config, error) {
 		HTTPAddr:        or(getenv("OPENFANTA_HTTP_ADDR"), ":8080"),
 		LogFormat:       or(getenv("OPENFANTA_LOG_FORMAT"), "json"),
 	}
+	c.VotoSources = list(getenv("OPENFANTA_VOTO_SOURCES"))
+	c.VotoAverageOf = list(getenv("OPENFANTA_VOTO_AVERAGE_OF"))
 	var errs []error
 	var err error
+	if _, err := voto.Build(c.VotoSources, c.VotoAverageOf); err != nil {
+		errs = append(errs, fmt.Errorf("OPENFANTA_VOTO_SOURCES / OPENFANTA_VOTO_AVERAGE_OF: %w", err))
+	}
 	if c.RequestsPerHour, err = intVar(getenv, "OPENFANTA_SPORTMONKS_REQUESTS_PER_HOUR", 1800); err != nil {
 		errs = append(errs, err)
 	} else if c.RequestsPerHour <= 0 {
@@ -103,4 +112,15 @@ func intVar(getenv func(string) string, name string, def int) (int, error) {
 		return 0, fmt.Errorf("%s: %w", name, err)
 	}
 	return n, nil
+}
+
+// list splits a comma separated value, dropping blanks.
+func list(v string) []string {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

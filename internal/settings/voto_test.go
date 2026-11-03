@@ -43,12 +43,12 @@ func TestVotoSection(t *testing.T) {
 		s := strings.Replace(string(classicJSON), `"openfanta.settings/1.0"`, `"`+schema+`"`, 1)
 		return []byte(strings.Replace(s, `"game"`, `"voto": `+voto+`, "game"`, 1))
 	}
-	good := `{"source":"averaged","rounding":{"mode":"nearest","step":50}}`
+	good := `{"source":"average","rounding":{"mode":"nearest","step":50}}`
 	s, err := Parse(doc("openfanta.settings/1.2", good))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := s.Doc.Voto; v.SourceName() != SourceAveraged || v.Rounding.Mode != RoundNearest || v.Rounding.Step != 50 {
+	if v := s.Doc.Voto; v.SourceName() != SourceAverage || v.Rounding.Mode != RoundNearest || v.Rounding.Step != 50 {
 		t.Errorf("voto = %+v", v)
 	}
 	if got := Classic().Doc.Voto.SourceName(); got != SourceProviderRating {
