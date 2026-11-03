@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +108,28 @@ func TestListVotoSources(t *testing.T) {
 	f.get("/v1/voto-sources", 200, &out)
 	if out.Default != "provider-rating" || len(out.Sources) != 3 || out.Sources[0].Name != "provider-rating" || out.Sources[0].Version == "" {
 		t.Fatalf("voto sources = %+v", out)
+	}
+}
+
+func TestOverridingMatchdayExceptionsIsNotServedYet(t *testing.T) {
+	f := setup(t)
+	body := `{"overrides":[{"fixture_id":"0190a0a0-0000-7000-8000-000000000001","policy":"automatic_voto","voto":"6.00"}]}`
+	req := httptest.NewRequest(http.MethodPut, "/v1/leagues/0190a0a0-0000-7000-8000-000000000002/matchdays/1/exceptions", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	f.h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotImplemented || rec.Header().Get("Content-Type") != "application/problem+json" {
+		t.Fatalf("PUT = %d %s: %s", rec.Code, rec.Header().Get("Content-Type"), rec.Body)
+	}
+	f.validate(req, rec)
+
+	// A malformed override is a client error before it is a missing feature.
+	bad := httptest.NewRequest(http.MethodPut, "/v1/leagues/0190a0a0-0000-7000-8000-000000000002/matchdays/1/exceptions", strings.NewReader(`{`))
+	bad.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	f.h.ServeHTTP(rec, bad)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("malformed body = %d", rec.Code)
 	}
 }
 

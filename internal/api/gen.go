@@ -24,6 +24,42 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for ExceptionOverridePolicy.
+const (
+	AutomaticVoto ExceptionOverridePolicy = "automatic_voto"
+	Wait          ExceptionOverridePolicy = "wait"
+)
+
+// Valid indicates whether the value is a known member of the ExceptionOverridePolicy enum.
+func (e ExceptionOverridePolicy) Valid() bool {
+	switch e {
+	case AutomaticVoto:
+		return true
+	case Wait:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FixtureException.
+const (
+	Postponed FixtureException = "postponed"
+	Suspended FixtureException = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the FixtureException enum.
+func (e FixtureException) Valid() bool {
+	switch e {
+	case Postponed:
+		return true
+	case Suspended:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ScoreRole.
 const (
 	Goalkeeper ScoreRole = "goalkeeper"
@@ -57,17 +93,39 @@ type BreakdownItem struct {
 // Decimal Example: 6.38
 type Decimal = string
 
+// ExceptionOverride defines model for ExceptionOverride.
+type ExceptionOverride struct {
+	FixtureId openapi_types.UUID `json:"fixture_id"`
+
+	// Policy `wait` leaves the players without a voto until the match is played; `automatic_voto` gives everyone involved the voto.
+	Policy ExceptionOverridePolicy `json:"policy"`
+
+	// Voto The automatic voto, as a two-decimal string. Omit to use the league's `real_match.automatic_voto`.
+	//
+	// Example: 6.00
+	Voto *string `json:"voto,omitempty"`
+}
+
+// ExceptionOverridePolicy `wait` leaves the players without a voto until the match is played; `automatic_voto` gives everyone involved the voto.
+type ExceptionOverridePolicy string
+
 // Fixture defines model for Fixture.
 type Fixture struct {
-	Away     Ref        `json:"away"`
-	Home     Ref        `json:"home"`
-	Id       string     `json:"id"`
-	Kickoff  *time.Time `json:"kickoff,omitempty"`
-	Matchday int        `json:"matchday"`
+	Away Ref `json:"away"`
+
+	// Exception Set when the real match was postponed or suspended; the league's real-match policy applies to it.
+	Exception *FixtureException `json:"exception,omitempty"`
+	Home      Ref               `json:"home"`
+	Id        string            `json:"id"`
+	Kickoff   *time.Time        `json:"kickoff,omitempty"`
+	Matchday  int               `json:"matchday"`
 
 	// Status Provider status, e.g. FT
 	Status string `json:"status"`
 }
+
+// FixtureException Set when the real match was postponed or suspended; the league's real-match policy applies to it.
+type FixtureException string
 
 // Health defines model for Health.
 type Health struct {
@@ -79,6 +137,11 @@ type Health struct {
 type Matchday struct {
 	Fixtures []Fixture `json:"fixtures"`
 	Number   int       `json:"number"`
+}
+
+// MatchdayExceptions defines model for MatchdayExceptions.
+type MatchdayExceptions struct {
+	Overrides []ExceptionOverride `json:"overrides"`
 }
 
 // PlayerMatchStats What the player did in the match, as derived from provider events. Shoot-outs never count.
@@ -269,6 +332,9 @@ type GetPlayerSeasonScoresParams struct {
 	VotoSource *VotoSourceQuery `form:"voto_source,omitempty" json:"voto_source,omitempty"`
 }
 
+// PutMatchdayExceptionsJSONRequestBody defines body for PutMatchdayExceptions for application/json ContentType.
+type PutMatchdayExceptionsJSONRequestBody = MatchdayExceptions
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// GetHealth Liveness probe
@@ -283,6 +349,9 @@ type ServerInterface interface {
 	// GetFixtureScores Voti and fantavoti for every player of a fixture
 	// (GET /v1/fixtures/{fixtureId}/scores)
 	GetFixtureScores(w http.ResponseWriter, r *http.Request, fixtureId FixtureId, params GetFixtureScoresParams)
+	// PutMatchdayExceptions Override the real-match policy for fixtures of a matchday
+	// (PUT /v1/leagues/{leagueId}/matchdays/{number}/exceptions)
+	PutMatchdayExceptions(w http.ResponseWriter, r *http.Request, leagueId openapi_types.UUID, number int)
 	// GetPlayer Get a player
 	// (GET /v1/players/{playerId})
 	GetPlayer(w http.ResponseWriter, r *http.Request, playerId PlayerId)
@@ -402,6 +471,41 @@ func (siw *ServerInterfaceWrapper) GetFixtureScores(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFixtureScores(w, r, fixtureId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutMatchdayExceptions operation middleware
+func (siw *ServerInterfaceWrapper) PutMatchdayExceptions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "leagueId" -------------
+	var leagueId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "leagueId", r.PathValue("leagueId"), &leagueId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "leagueId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "number" -------------
+	var number int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "number", r.PathValue("number"), &number, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "number", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutMatchdayExceptions(w, r, leagueId, number)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -731,6 +835,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/readyz", wrapper.GetReady)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/settings/default", wrapper.GetDefaultSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/voto-sources", wrapper.ListVotoSources)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/leagues/{leagueId}/matchdays/{number}/exceptions", wrapper.PutMatchdayExceptions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/seasons", wrapper.ListSeasons)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/seasons/{seasonId}/matchdays", wrapper.ListMatchdays)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/seasons/{seasonId}/matchdays/{number}/scores", wrapper.GetMatchdayScores)
@@ -906,6 +1011,74 @@ func (response GetFixtureScores404ApplicationProblemPlusJSONResponse) VisitGetFi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMatchdayExceptionsRequestObject struct {
+	LeagueId openapi_types.UUID `json:"leagueId"`
+	Number   int                `json:"number"`
+	Body     *PutMatchdayExceptionsJSONRequestBody
+}
+
+type PutMatchdayExceptionsResponseObject interface {
+	VisitPutMatchdayExceptionsResponse(w http.ResponseWriter) error
+}
+
+type PutMatchdayExceptions200JSONResponse MatchdayExceptions
+
+func (response PutMatchdayExceptions200JSONResponse) VisitPutMatchdayExceptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMatchdayExceptions400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PutMatchdayExceptions400ApplicationProblemPlusJSONResponse) VisitPutMatchdayExceptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMatchdayExceptions404ApplicationProblemPlusJSONResponse Problem
+
+func (response PutMatchdayExceptions404ApplicationProblemPlusJSONResponse) VisitPutMatchdayExceptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMatchdayExceptions501ApplicationProblemPlusJSONResponse Problem
+
+func (response PutMatchdayExceptions501ApplicationProblemPlusJSONResponse) VisitPutMatchdayExceptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(501)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1204,6 +1377,9 @@ type StrictServerInterface interface {
 	// GetFixtureScores Voti and fantavoti for every player of a fixture
 	// (GET /v1/fixtures/{fixtureId}/scores)
 	GetFixtureScores(ctx context.Context, request GetFixtureScoresRequestObject) (GetFixtureScoresResponseObject, error)
+	// PutMatchdayExceptions Override the real-match policy for fixtures of a matchday
+	// (PUT /v1/leagues/{leagueId}/matchdays/{number}/exceptions)
+	PutMatchdayExceptions(ctx context.Context, request PutMatchdayExceptionsRequestObject) (PutMatchdayExceptionsResponseObject, error)
 	// GetPlayer Get a player
 	// (GET /v1/players/{playerId})
 	GetPlayer(ctx context.Context, request GetPlayerRequestObject) (GetPlayerResponseObject, error)
@@ -1360,6 +1536,40 @@ func (sh *strictHandler) GetFixtureScores(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetFixtureScoresResponseObject); ok {
 		if err := validResponse.VisitGetFixtureScoresResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutMatchdayExceptions operation middleware
+func (sh *strictHandler) PutMatchdayExceptions(w http.ResponseWriter, r *http.Request, leagueId openapi_types.UUID, number int) {
+	var request PutMatchdayExceptionsRequestObject
+
+	request.LeagueId = leagueId
+	request.Number = number
+
+	var body PutMatchdayExceptionsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutMatchdayExceptions(ctx, request.(PutMatchdayExceptionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutMatchdayExceptions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutMatchdayExceptionsResponseObject); ok {
+		if err := validResponse.VisitPutMatchdayExceptionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1552,62 +1762,73 @@ func (sh *strictHandler) ListVotoSources(w http.ResponseWriter, r *http.Request)
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"1Fvpk9u2kv9XuripyozDkTR2rid/SDmHs96K7Vk7770PllfCkC0RGRKgAVCyMjv/+1bjICkJOiY+tvJp",
+	"NCLY6OOH7kZ36zbJZFVLgcLoZHyb1EyxCg0q+99T/t40Cp/l9A8XyTipmSmSNBGswmSczNvnaaLwXcMV",
+	"5snYqAbTRGcFVoxenEtVMZOMk6bhtNKsa3pZG8XFIrm7S5Orkq1R7d2mDo8/bJfXyLQUe3fR4fGH7fIv",
+	"aeRr2agM/7tBtaaXctSZ4rXhknb9d4EK4ZpphKU0HDJZIcyVrAZJ6vh6Z19sGVtKI6fakkz6vOQ4Z01J",
+	"zNRKLnmO6kIxQ3zs8nVHQulaCo3WsldKXpdY0cdMCoPC0EdW1yXPGDE6rN2Kr/7QxPVtb98vFM6TcfIf",
+	"ww46Q/dUDwNdu+Om3E8EoFJSpcA0vHr6E/zj62++A78N5GgYL/XA6tBTo81+VMhucrkSz4xjt1ayRmW4",
+	"kyOTOe6q+AnoTJLkYJ+nCb5nVV2SRhaSlbv6SZNMNk4HFRe8aqpkfNmu4sLgAhUtqyX3J+WQFn7GjFes",
+	"TJzaA5beJJ4bt1dL7G27kbz+AzND+wQK49se798OHn1PrzFjUJGc/3Pxw5vRxT/efjWZDOyH24d3X8Sk",
+	"++V9hlY5L5eoFHc629SkP8tTnp+Ac+K95FkE3bMV42YGJbIlajAFgju9GlbcFLIxwAj2EhpheGkXVMxk",
+	"BXDtVuaPYcYaIytmeDalpTNYcCKGS1RrKRC4WMpyibl9m1bQyUFBRnuT0P5JmmyS6Om4E8E+2BHg9wKh",
+	"fdlSt4BlYFbyIndmAUdkAC8rboCE0WiZKZEtGvxSw0whK6dWssGWNIMNPH47GI3oqDdlya7pG+dxejY+",
+	"uxydTSaD0ej8h/+1Rj7rWfv8h/Mvom6oD7ueaVvDxUDn3f0uNtiKrY9h/hXOiQYGpO1q9jUaWBUorKZI",
+	"P97yK6ahltoQxRykAt3oGkVOUNhQKr1z4d5xUoB1WIQzCdz0UdDSI48ZyJHQ24reQUUhKzxRVndUdijc",
+	"8OxGzucbxyhnBi8MrzA5gQUrYu5UvuuCtGGm0bvqvfJBANyCFHCwGMDT34/Cw8Ki3bPdwKsiddaP4eU/",
+	"kZWm2IVLx2GHc3lzlA//Wmyn5z2NRN2W/cwNVkd9cwD5XbsNU4qt6X/RVNeoYlrf4tQvTLvdDzHdOl+9",
+	"y770/vh0/ndd+Y4kW9x2e8S4dLmX5fW1YUbHEhZmep4ccp4DF53rtv4xR8XJJVMiAyEfIZctjB7A60JK",
+	"cyEbo0GQGwcbAunAbjkarbmO8fAL+X5wjyErmaYzv0BTWDO0MXsUi9me6JQSHcWvm7h3+qn31DoUBpQr",
+	"gCHpV5SyCWngjyZfYO4Z0QO4YsqAnIcvTuZFo5nWHLNY8uKWuI0z5pNDYKDRgH1nZ9vH3qVqA0whyBqF",
+	"NdZRdrISmZjqAtHsMvKrZOUNYo0KVoX00RmYyOlfCnjIKsikyDDHHIR0+loVvLTBcO20Jh1Sak6hEP5d",
+	"WJsBN4BMCR/Dr6VoNGUAHlbXIemDs8XNtMfk+RgEZQBtGLGpBNchqci/bOZznnFJYaQRBMGNCOK1QX8b",
+	"g7pzSddS0i6JzVozrvkSpySOnuaKrXZ1cwlz6WkzbZzkZA+g5SIENm4K+0indilxbq1a4hLL0gtPqSrC",
+	"mcJFU9rUGyhOPAYmgDRgSWcKc06HR17LfH1u/fX7Nk09bOMteVZcHBKnw3zduFO/4kKgAlYgy+2yhZQ5",
+	"nHWPvtTuLecVoZQa1VeXKWxJlDpVWADVKFhp1v4bKcr1x5PX0oyjWTtl5yng+6xscrohOFY4Hj+7Tn8B",
+	"8Pt26Bzll3rriLRHI3hSynz65yNtNUBHgTi0CcxhtuRKTFuZDy9tZZ1WXOuYDFdhBRh2g8Iai/xe0Jvj",
+	"ivRmrA/QjJz+9drK4JzFUYY7Luzbh5iwC2x8Cdi8/x6W8xN0Y00ylfOpKdBl7rucvWAV5lARVOe9u4uX",
+	"P4S9ATxnYg0hOYCCLdH6rai/0SjM1OeL2wmzIC8/J/qM7hyMLwoDymXJFBAyKXJYY1nKVZS2ezTNmMoj",
+	"R+KZg5iOkDqkq630wmEvovII3naN38dvGx6TLc57Sto5hptBLBZh92QAUc8Yd/9xdESzqa6uspnZuPpG",
+	"9L7Qpcu7qDTclBh9y33RT7HZtWzM+Lpk4niubZ8G8umh1JvuOjvS7Ln5uILV7Sn3Dbs0ul8jImUehcxg",
+	"PmVm761qt6LTKOXrWrsHA8WCC5wuUWmfDe68v0dGLurGTAumi+hjZauIcTujMVws9FQX7OE338bXNDUq",
+	"jf5CcPSm2C8Nnqb3bSbSrfLilmI25G2lS/sG6TS9x5xRBNHNprmvSfeY5BTFfnxN9SWISf6avOCu4G1u",
+	"e/KNb7MEGrm3zpkwLFSzWFm+nCfjNydWKN9ul2ltHl2XjQu5uqlCqGsZfwyES5eDaxR/srYGt4nXu3Sr",
+	"qHjPQkdI0qMPnUM+sVCjpHOioTq0kUjIxsw5lnm0RqicNzq4h0O4i+R/smkwRCTSh/v1wQr69n2cDI6s",
+	"OlHUjwWDH31/Qt7D2vZ8+AtYvLBqwUVZL0XkhXCpI+vRBdWUsTRp64B663vNpJsVzl4pyxq+Q5JXT//E",
+	"bFhtS4RgsbR3aB0k9p7337g2kYIYPTq9xOM8R+Sgf3RHd8zHecaj4raBbtexo+GhyLL9sBFGre8Tb++b",
+	"U6TtJjGuj2zSJVMPRw+/HT4cPfzutPJpu3UnfFxpTt+RsCBzqxaW5/Z1Vl71nrvwv3uegv0gl1lToTCP",
+	"QSMC+UklWDkMzz20hsvLwR9aigFcSS4MLFnZUPqv3CsLVFA0IleYm0IPkogAHfA2mXHfh1CRMSEFz1gJ",
+	"//X65Qv61op3tAAcQGhXx/TXNVdjGXaPoZNsfLRtmia9BHHr7pSjMHzOQ5Or7Zs/BgZZwcSCLoc39nIl",
+	"cAWqEZuNn8uj6vCY6lKxPgeHtRN3Q23D+J5KcO7gdP/Vs9Kx2nRgqdtkV7A7m3XPIyHlFbL8QopyDSzL",
+	"0NaEwbr2jJUZl66/zkQOwd/bbrvN2ijwvKxRPKUng4mYiJ+kWJJNpdDjibiAZz9rX01l7xr0LT8NZ//8",
+	"57Of9fkAXthCtsJy7Ws4XNGiJqNINCAK1o9rOJvZvl8KszbszNJejXPm+sCzc7vdgwebTUbXOAV8zzJT",
+	"rsGs5EQAzBXLnJuAnC+40Q8epKCbrACmYTaxreJJMgOp6L/vBqPRJJmloCUICVnJURjbTyXgagvSeSmZ",
+	"GRBtxy5wh+wwqCDbw11ITbmAtddjULIRtiBkq7Cu0hr8UmqVTy/9VFLEz4i8Nzk0Opyd0C1wCIRGWJqY",
+	"WyW+akpLj1wI985KoWls8ZhpqJvrkusC8zHUfadm7JjFHtdGhH9RSiptW7ftNMJs3wTEzPESRiggY0qt",
+	"gQmY/fI7W8zI7YocZs/mFy+kwAubvs0Ijgs0MHs0+hpeSAPPZU4uIydqSZqUPEOhrVPyox5Pfr367eLR",
+	"YJSkSaPKZJwUxtR6PByuVqvBQjQDqRZD/5oeskVd0upBYaqyVy1IWmDDk6tnPRcyTkaDy8HIVg1rFKzm",
+	"yTghAo/cWEFhj/awsH29P+nzwjUGyItYpTzLk3HyKxrf+tuaKnk4Gh2YKLnfJInfITJI8rvDjD3wXENT",
+	"+6GRpqoY5RbJb3yJgp6SBW02ySjkvkmcYMlbWj5UyPL1QSHJvaz/f2S0WxN+NKolglGMctIBWe6b0aN9",
+	"dFtGe3M4fcUQVd5pBs6yArMbdwpzZhid9fN9+lpeDkNFc3jbTn7dDVXjGpv7tOgbrq9oWboxYLbnctIt",
+	"GXYDaHRD+SA7RNvG92gWBzFPioCvGnE09AUWPOl43NtCRSN0CrLMURuYc6WNRcTXThUnIoLWf/1XEfSk",
+	"ybkhOHLb77IjOT6muk6PbYJ1ogUkhYvEQSR116QjWHKB9UPQlB5dvD3H98EAPHrjs0lbxOo+jZAqR+Wb",
+	"Lcgq10dzfSSKHp8bCf/aza3mUnlEeL5OBINLGvTw1n0gKIQ7vB7eurbi3RA3xyiaSMf6N5d9sLziwrUV",
+	"B/DUtkri80X9KaQzqWyD1re5ZWM0zxG40ROXj8CKi1yuzvcOes2665hma1i1rW7dzcAxbqya6K2JsFqT",
+	"yiYJTGyNnQ3giYAwuwEK65Jl6McC/PjT3PPsVewyNK4nIqjvsW+v52so7VABK8uWpt5oYuVsbfNDJgCr",
+	"2rgXICuRKRsgqsFE2MjrtqZszw5f5V0zPtCBrJQ2qRQ56EKu2r4+vq9LRp8Vy9Am3Q8eUF5kg1wOazTj",
+	"Bw+AGxCIuSZ9FJSRuyNlyfn8skLChC54DWfPH563aWbgYCJKPsdsnZVohSJFCbki0kzoFZnim9Gly8I2",
+	"ncxVYyJzOzueJjI/HMD7YfPDUdLtvNF+wofGVp3retegNj/6MsNH8VoRRd1tRjlfGPxkfnMfB7sJYwd6",
+	"iwNBkMiwHXsIwPkMXpQyuMu/6nXD0Fc7Q7k5D0nitG1n6317xdDgfr277fyv907D2zBof3coBl+F2uv9",
+	"gm874/9JA6mtgu+5MlgGPneY/JVcO3T1am+DjBlWykVnA/frg/3JDyUHr/2aj5oJ9zY+rTjt6r7HsttA",
+	"9pS01svlCh1cLFAbzO2FZPdmpylaBDUc0+bwNvyoo5dRHFTx83bVffHd/rrkI99UNvg+yULtsGy0gxCq",
+	"9qfYOGrTXoflNPO2OiW3a7PYz30ILWyYB86XunWKLkVph3j/IqC6FPX4BSbo4i/eYDqQfZpE4e93LUr7",
+	"96KQB/sJ/PTvdVGKhOrtm1IEhrvB+wQYumDs0PQxoHhy7P9737s/Y5a4WXXpJkojLQ2WKal1698Owse3",
+	"A3udoEVs9NuLzhR2DZMwTs27bqP/EZdPKP0kczt2zRXIle167eDvZ7d/2w79lCYOe+xJC4MsKUWnzcZl",
+	"6jMSo6FguhhEUjtbOfUNjc3eR09LZ7770S+thlWdcejOf9FrtUUN8yTsUvPsRoP7NZzlMLKtbeQMHMmZ",
+	"vSSnIPC9cT+XSqGQKxLA1iHsFL3vu4Q3Q2tnNoZZJXOcWeDNtMF6Rtt2DZXzAZAuZ+RfbeeIlVpOBGln",
+	"1psomDlHpxp3mfflBwebdw0qjjp2J6cD2rmFT4qWrRbqHsx4K3l8hNH+RodiCOuMQBrRdvg3msu2v2Hw",
+	"JLsWWsYEZIWUGvegxmZzahncddcvGg+HpcxYWUhtxt+Pvh9ZH+pJtK0mX9snjxx+AO28Re+bkAb1F7XH",
+	"qfsuXCjv3t79XwAAAP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

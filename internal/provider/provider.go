@@ -62,12 +62,14 @@ type Team struct {
 
 // Fixture is a parsed fixture. Facts uses provider refs as player and team IDs.
 type Fixture struct {
-	Ref     string
-	Final   bool // finished: no further changes expected except corrections
-	Status  string
-	Kickoff *time.Time
-	Home    Team
-	Away    Team
-	Players map[string]string // player ref -> name
-	Facts   domain.MatchFacts
+	Ref    string
+	Final  bool // finished: no further changes expected except corrections
+	Status string
+	// Exception is set when the match was postponed or suspended.
+	Exception domain.Exception
+	Kickoff   *time.Time
+	Home      Team
+	Away      Team
+	Players   map[string]string // player ref -> name
+	Facts     domain.MatchFacts
 }

@@ -2,6 +2,7 @@
   "Ref": "5001",
   "Final": true,
   "Status": "FT",
+  "Exception": "",
   "Kickoff": "2026-08-23T18:45:00Z",
   "Home": {
     "Ref": "100",

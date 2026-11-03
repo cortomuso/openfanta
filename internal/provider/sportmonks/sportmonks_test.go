@@ -426,3 +426,28 @@ func TestParseCount(t *testing.T) {
 		}
 	}
 }
+
+func TestParseFixtureExceptions(t *testing.T) {
+	base := raw(t, "fixture_5001_ft.json")
+	for state, want := range map[string]d.Exception{
+		"FT": d.ExceptionNone, "NS": d.ExceptionNone, "CANCELLED": d.ExceptionNone, "AWARDED": d.ExceptionNone,
+		"POSTPONED": d.ExceptionPostponed, "SUSPENDED": d.ExceptionSuspended,
+		"INTERRUPTED": d.ExceptionSuspended, "ABANDONED": d.ExceptionSuspended,
+	} {
+		r := base
+		r.Body = bytes.Replace(base.Body, []byte(`"developer_name": "FT"`), []byte(`"developer_name": "`+state+`"`), 1)
+		if bytes.Equal(r.Body, base.Body) && state != "FT" {
+			t.Fatalf("%s: the state was not replaced", state)
+		}
+		f, err := ParseFixture(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.Exception != want || f.Status != state {
+			t.Errorf("%s: exception = %q, status = %q; want %q", state, f.Exception, f.Status, want)
+		}
+		if want != d.ExceptionNone && f.Final {
+			t.Errorf("%s must not be final", state)
+		}
+	}
+}

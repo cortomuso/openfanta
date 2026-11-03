@@ -101,6 +101,24 @@ func (s *Server) GetDefaultSettings(_ context.Context, _ GetDefaultSettingsReque
 	return GetDefaultSettings200JSONResponse{Sha256: d.SHA256, Body: body}, nil
 }
 
+// PutMatchdayExceptions implements StrictServerInterface. Overrides are for
+// league admins, and leagues have no authentication or lifecycle yet.
+func (s *Server) PutMatchdayExceptions(_ context.Context, _ PutMatchdayExceptionsRequestObject) (PutMatchdayExceptionsResponseObject, error) {
+	detail := "overriding the real-match policy needs league authentication and the matchday lifecycle, which are not built yet"
+	return PutMatchdayExceptions501ApplicationProblemPlusJSONResponse(Problem{
+		Type: "about:blank", Title: http.StatusText(http.StatusNotImplemented), Status: http.StatusNotImplemented, Detail: &detail,
+	}), nil
+}
+
+// exception maps a stored exception to the API field; nil for a normal match.
+func exception(e string) *FixtureException {
+	if e == "" {
+		return nil
+	}
+	v := FixtureException(e)
+	return &v
+}
+
 // ListVotoSources implements StrictServerInterface.
 func (s *Server) ListVotoSources(_ context.Context, _ ListVotoSourcesRequestObject) (ListVotoSourcesResponseObject, error) {
 	out := ListVotoSources200JSONResponse{Default: DefaultVotoSource}
@@ -150,7 +168,7 @@ func (s *Server) ListMatchdays(ctx context.Context, req ListMatchdaysRequestObje
 		}
 		md := &out.Matchdays[len(out.Matchdays)-1]
 		md.Fixtures = append(md.Fixtures, Fixture{
-			Id: r.ID.String(), Matchday: n, Kickoff: r.Kickoff, Status: r.Status,
+			Id: r.ID.String(), Matchday: n, Kickoff: r.Kickoff, Status: r.Status, Exception: exception(r.Exception),
 			Home: Ref{Id: r.HomeID.String(), Name: r.HomeName}, Away: Ref{Id: r.AwayID.String(), Name: r.AwayName},
 		})
 	}
@@ -227,7 +245,7 @@ func (s *Server) GetFixtureRuns(ctx context.Context, req GetFixtureRunsRequestOb
 	}
 	out := GetFixtureRuns200JSONResponse{
 		Fixture: Fixture{
-			Id: f.ID.String(), Matchday: int(f.Matchday), Kickoff: f.Kickoff, Status: f.Status,
+			Id: f.ID.String(), Matchday: int(f.Matchday), Kickoff: f.Kickoff, Status: f.Status, Exception: exception(f.Exception),
 			Home: Ref{Id: f.HomeID.String(), Name: f.HomeName}, Away: Ref{Id: f.AwayID.String(), Name: f.AwayName},
 		},
 		Runs: make([]Run, 0, len(rows)),

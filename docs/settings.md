@@ -28,6 +28,22 @@ The `voto` section (schema 1.2 or later) says where the base voti come from and 
 
 The sources are explained in [the voto sources guide](guides/voto-sources.md). Rounding applies to the source's voto only. A voto d'ufficio from `senza_voto` and the event points are not rounded. The code is [`internal/settings/voto.go`](https://github.com/cortomuso/openfanta/blob/main/internal/settings/voto.go) and [`internal/voto/voto.go`](https://github.com/cortomuso/openfanta/blob/main/internal/voto/voto.go).
 
+## Postponed and suspended matches
+
+The `real_match` section (schema 1.3 or later) is stage 0 of scoring: what a league does with a real match that was postponed or suspended. Without it a league waits for the real voti, which is what Classic does.
+
+```json
+"real_match": { "on_postponed": "automatic_voto", "on_suspended": "wait", "automatic_voto": 600 }
+```
+
+- `on_postponed`, `on_suspended`: `wait` (the players have no voto from that match until it is played) or `automatic_voto` (everyone involved gets `automatic_voto`, in hundredths).
+- `automatic_voto` is required when a policy uses it. It may also be set with `wait`, for an admin's override to hand out.
+- Ingest records the exception on each fixture (`exception` in the fixture API, `postponed` or `suspended`). Sportmonks `POSTPONED` is a postponement; `SUSPENDED`, `INTERRUPTED` and `ABANDONED` are suspensions, because a match stopped part-way can be resumed or replayed. Cancelled, walk-over and awarded matches are not covered.
+- An admin can override the policy per fixture and matchday (`PUT /v1/leagues/{id}/matchdays/{n}/exceptions`). An override beats the league policy and applies to any fixture, so it also covers a match played outside its round window.
+- A player keeps one voto per matchday. When a transfer or a late match gives them two, a voto earned on the pitch beats an automatic one, then the later kickoff wins (the club they ended the round with), then the higher fixture ID.
+
+The decision logic is `realmatch.Decide` and `realmatch.PickVoto` in [`internal/realmatch/realmatch.go`](https://github.com/cortomuso/openfanta/blob/main/internal/realmatch/realmatch.go), and the settings are in [`internal/settings/realmatch.go`](https://github.com/cortomuso/openfanta/blob/main/internal/settings/realmatch.go). **Not wired yet:** the policy is applied when a matchday closes, and the override endpoint answers 501, because both need the matchday lifecycle and league authentication, which are not built. The outcome carries the rule that produced it (`regular`, `league_policy` or `matchday_override`) for the explain trace.
+
 ## How the player rules are applied
 
 For each player who appeared in a match:

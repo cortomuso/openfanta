@@ -65,14 +65,15 @@ type Settings struct {
 // (`meta` and `x-*` keys) are not decoded here: they live only in Canonical,
 // byte for byte as submitted.
 type Document struct {
-	Schema   string   `json:"schema"`
-	Engine   string   `json:"engine"`
-	Requires []string `json:"requires"`
-	Game     string   `json:"game"`
-	Roles    *Roles   `json:"roles"`
-	Voto     Voto     `json:"voto"`
-	Player   Player   `json:"player"`
-	Team     []Module `json:"team"`
+	Schema    string    `json:"schema"`
+	Engine    string    `json:"engine"`
+	Requires  []string  `json:"requires"`
+	Game      string    `json:"game"`
+	Roles     *Roles    `json:"roles"`
+	Voto      Voto      `json:"voto"`
+	RealMatch RealMatch `json:"real_match"`
+	Player    Player    `json:"player"`
+	Team      []Module  `json:"team"`
 }
 
 // Module is one custom rule of the team stage. Only expr.cel/1 exists so far.
@@ -159,6 +160,9 @@ func (doc *Document) validate() error {
 		return err
 	}
 	if err := doc.validateVoto(); err != nil {
+		return err
+	}
+	if err := doc.validateRealMatch(); err != nil {
 		return err
 	}
 	return doc.Player.validate()

@@ -133,7 +133,7 @@ func (q *Queries) FixtureScores(ctx context.Context, arg FixtureScoresParams) ([
 }
 
 const getFixture = `-- name: GetFixture :one
-SELECT f.id, f.kickoff, f.status, m.number AS matchday, m.season_id,
+SELECT f.id, f.kickoff, f.status, f.exception, m.number AS matchday, m.season_id,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
 FROM fixtures f
 JOIN matchdays m ON m.id = f.matchday_id
@@ -143,15 +143,16 @@ WHERE f.id = $1
 `
 
 type GetFixtureRow struct {
-	ID       uuid.UUID
-	Kickoff  *time.Time
-	Status   string
-	Matchday int32
-	SeasonID uuid.UUID
-	HomeID   uuid.UUID
-	HomeName string
-	AwayID   uuid.UUID
-	AwayName string
+	ID        uuid.UUID
+	Kickoff   *time.Time
+	Status    string
+	Exception string
+	Matchday  int32
+	SeasonID  uuid.UUID
+	HomeID    uuid.UUID
+	HomeName  string
+	AwayID    uuid.UUID
+	AwayName  string
 }
 
 func (q *Queries) GetFixture(ctx context.Context, id uuid.UUID) (GetFixtureRow, error) {
@@ -161,6 +162,7 @@ func (q *Queries) GetFixture(ctx context.Context, id uuid.UUID) (GetFixtureRow, 
 		&i.ID,
 		&i.Kickoff,
 		&i.Status,
+		&i.Exception,
 		&i.Matchday,
 		&i.SeasonID,
 		&i.HomeID,
@@ -495,7 +497,7 @@ func (q *Queries) PlayerSeasonScores(ctx context.Context, arg PlayerSeasonScores
 }
 
 const seasonFixtures = `-- name: SeasonFixtures :many
-SELECT m.number AS matchday, f.id, f.kickoff, f.status,
+SELECT m.number AS matchday, f.id, f.kickoff, f.status, f.exception,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
 FROM matchdays m
 JOIN fixtures f ON f.matchday_id = m.id
@@ -506,14 +508,15 @@ ORDER BY m.number, f.kickoff, f.id
 `
 
 type SeasonFixturesRow struct {
-	Matchday int32
-	ID       uuid.UUID
-	Kickoff  *time.Time
-	Status   string
-	HomeID   uuid.UUID
-	HomeName string
-	AwayID   uuid.UUID
-	AwayName string
+	Matchday  int32
+	ID        uuid.UUID
+	Kickoff   *time.Time
+	Status    string
+	Exception string
+	HomeID    uuid.UUID
+	HomeName  string
+	AwayID    uuid.UUID
+	AwayName  string
 }
 
 func (q *Queries) SeasonFixtures(ctx context.Context, seasonID uuid.UUID) ([]SeasonFixturesRow, error) {
@@ -530,6 +533,7 @@ func (q *Queries) SeasonFixtures(ctx context.Context, seasonID uuid.UUID) ([]Sea
 			&i.ID,
 			&i.Kickoff,
 			&i.Status,
+			&i.Exception,
 			&i.HomeID,
 			&i.HomeName,
 			&i.AwayID,

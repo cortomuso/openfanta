@@ -32,7 +32,7 @@ FROM seasons s JOIN competitions c ON c.id = s.competition_id
 WHERE s.id = $1;
 
 -- name: SeasonFixtures :many
-SELECT m.number AS matchday, f.id, f.kickoff, f.status,
+SELECT m.number AS matchday, f.id, f.kickoff, f.status, f.exception,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
 FROM matchdays m
 JOIN fixtures f ON f.matchday_id = m.id
@@ -48,7 +48,7 @@ SELECT EXISTS (SELECT 1 FROM matchdays WHERE season_id = $1 AND number = $2);
 SELECT id, name FROM players WHERE id = $1;
 
 -- name: GetFixture :one
-SELECT f.id, f.kickoff, f.status, m.number AS matchday, m.season_id,
+SELECT f.id, f.kickoff, f.status, f.exception, m.number AS matchday, m.season_id,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
 FROM fixtures f
 JOIN matchdays m ON m.id = f.matchday_id
