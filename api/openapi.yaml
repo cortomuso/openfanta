@@ -9,7 +9,8 @@ info:
     - IDs are opaque strings (UUIDs). Never rely on their structure.
     - Scores (`voto`, `fantavoto`, breakdown `points`) are **decimal strings with exactly two
       fractional digits**, such as `"6.38"` or `"7.00"`, so no client ever parses a float.
-      `voto` is the provider rating unrounded; rounding is a league setting.
+      `voto` is the base voto of the chosen source; rounding is a league setting, and the Classic
+      default uses the provider rating unrounded.
     - Rule set bodies are returned as published: point values there are integer hundredths.
     - Errors use RFC 9457 `application/problem+json`.
     - Responses carry an `ETag`; send `If-None-Match` to get `304 Not Modified`.
@@ -61,6 +62,22 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Settings" }
+
+  /v1/voto-sources:
+    get:
+      tags: [settings]
+      operationId: listVotoSources
+      summary: List the voto sources a league can choose
+      description: |
+        A league picks one in its settings document (`voto.source`) and, next to it, how the
+        voto is rounded (`voto.rounding`: `mode` and `step` in hundredths). The `name` is also
+        the `voto_source` of a run and of the score queries.
+      responses:
+        "200":
+          description: The sources, with the one used when a document names none.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VotoSourceList" }
 
   /v1/seasons:
     get:
@@ -221,6 +238,21 @@ components:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
   schemas:
+    VotoSourceList:
+      type: object
+      required: [default, sources]
+      properties:
+        default: { type: string, example: provider-rating }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/VotoSource" }
+    VotoSource:
+      type: object
+      required: [name, version, description]
+      properties:
+        name: { type: string, example: provider-rating }
+        version: { type: string, description: Identifies the parameters; a change makes a new run., example: "1" }
+        description: { type: string }
     Health:
       type: object
       required: [status]

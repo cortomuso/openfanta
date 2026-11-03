@@ -31,7 +31,7 @@ func newService(t *testing.T, st *store.Store, srv *httptest.Server, st2 *settin
 	sm := sportmonks.New("token", hc)
 	sm.BaseURL = srv.URL
 	return &Service{
-		Store: st, Provider: sm, Settings: st2, Voto: voto.NewProviderRating(),
+		Store: st, Provider: sm, Settings: st2, Sources: []voto.Source{voto.NewProviderRating()},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: time.Now,
 	}
 }
@@ -247,6 +247,87 @@ func TestRecomputeWithNewRuleSetVersion(t *testing.T) {
 	runs, _ := st.Queries().FixtureRuns(ctx, id)
 	if len(runs) != 2 || runs[1].SettingsSha256 != bumped.SHA256 || runs[1].Reason != "goal 3.5" || !runs[0].IsCurrent || !runs[1].IsCurrent {
 		t.Errorf("runs = %+v", runs)
+	}
+}
+
+func TestVotoSourceAndRoundingComeFromSettings(t *testing.T) {
+	st, _ := storetest.New(t)
+	_, srv := smtest.New(t)
+	classic := string(settings.Classic().Canonical)
+	doc := strings.Replace(classic, `"openfanta.settings/1.0"`, `"openfanta.settings/1.2"`, 1)
+	doc = strings.Replace(doc, `"game":"classic"`, `"game":"classic","voto":{"rounding":{"mode":"nearest","step":100}}`, 1)
+	whole, err := settings.Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := newService(t, st, srv, whole)
+	svc.Sources = nil // every source
+	rep, err := svc.IngestMatchday(ctx, "777", 1, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := rep.Fixtures[0].ID
+	if rep.Fixtures[0].RunsCreated != 3 {
+		t.Fatalf("report = %+v", rep.Fixtures[0])
+	}
+	got := scoresUnder(t, st, id, whole)
+	for name, want := range map[string]scoreView{
+		"Home Striker":     {"8.00", "12.00", false}, // 8.10 -> 8, goal +3, assist +1
+		"Home Midfielder":  {"6.00", "3.00", false},  // 5.60 -> 6, penalty missed -3
+		"Away Striker":     {"6.00", "6.00", false},  // 6.25 -> 6
+		"Home Super Sub":   {"7.00", "10.00", false}, // 7.24 -> 7, goal +3
+		"Away Centre Back": {"6.00", "4.00", false},  // 5.50 -> 6 (half away from zero), own goal -2
+	} {
+		if got[name] != want {
+			t.Errorf("%s = %+v, want %+v", name, got[name], want)
+		}
+	}
+
+	// Every source has its own run under the same settings.
+	runs, err := st.Queries().FixtureRuns(ctx, id)
+	if err != nil || len(runs) != 3 {
+		t.Fatalf("runs = %d, %v", len(runs), err)
+	}
+	for _, name := range []string{"provider-rating", "openfanta-stat", "average"} {
+		rows, err := st.Queries().FixtureScores(ctx, db.FixtureScoresParams{FixtureID: id, SettingsSha256: whole.SHA256, VotoSource: name})
+		if err != nil || len(rows) == 0 {
+			t.Errorf("%s: %d rows, %v", name, len(rows), err)
+		}
+	}
+	for _, r := range runs {
+		if r.VotoSourceVersion == "" {
+			t.Errorf("run of %s has no source version", r.VotoSource)
+		}
+	}
+}
+
+func TestEverySourceIsComputedOnceAndRecomputeIsIdempotent(t *testing.T) {
+	st, _ := storetest.New(t)
+	_, srv := smtest.New(t)
+	svc := newService(t, st, srv, nil)
+	svc.Sources = nil // every source
+	rep, err := svc.IngestMatchday(ctx, "777", 1, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ok FixtureReport
+	for _, f := range rep.Fixtures {
+		if f.Ref == "5001" {
+			ok = f
+		}
+	}
+	if ok.RunsCreated != 3 || ok.Err != nil {
+		t.Fatalf("fixture 5001 = %+v, want 3 runs", ok)
+	}
+	again, err := svc.Recompute(ctx, RecomputeOptions{})
+	if err != nil || again.Fixtures[0].RunsCreated != 0 {
+		t.Fatalf("recompute = %+v, %v", again, err)
+	}
+
+	// Choosing fewer sources computes fewer, and the others are left alone.
+	svc.Sources = []voto.Source{voto.NewProviderRating()}
+	if again, err = svc.Recompute(ctx, RecomputeOptions{}); err != nil || again.Fixtures[0].RunsCreated != 0 {
+		t.Fatalf("recompute one source = %+v, %v", again, err)
 	}
 }
 

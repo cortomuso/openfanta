@@ -27,7 +27,7 @@ export default defineConfig({
       ],
       sidebar: [
         { label: 'Start here', items: ['getting-started', 'project-layout'] },
-        { label: 'Guides', items: ['guides/changing-default-settings', 'guides/adding-a-provider'] },
+        { label: 'Guides', items: ['guides/changing-default-settings', 'guides/voto-sources', 'guides/adding-a-provider'] },
         { label: 'Reference', items: ['settings', 'api-overview'] },
         ...openAPISidebarGroups,
         { label: 'Design', items: ['design'] },

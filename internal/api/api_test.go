@@ -46,7 +46,7 @@ func setup(t *testing.T) *fixture {
 	hc.MaxRetries = 0
 	sm := sportmonks.New("token", hc)
 	sm.BaseURL = srv.URL
-	svc := &ingest.Service{Store: st, Provider: sm, Voto: voto.NewProviderRating(), Logger: quiet, Now: time.Now}
+	svc := &ingest.Service{Store: st, Provider: sm, Sources: []voto.Source{voto.NewProviderRating()}, Logger: quiet, Now: time.Now}
 	if _, err := svc.IngestMatchday(ctx, "777", 1, ingest.Options{}); err != nil {
 		t.Fatal(err)
 	}
@@ -98,6 +98,15 @@ func (f *fixture) validate(req *http.Request, rec *httptest.ResponseRecorder) {
 	})
 	if err != nil {
 		f.t.Errorf("GET %s: response does not match the OpenAPI spec: %v", req.URL, err)
+	}
+}
+
+func TestListVotoSources(t *testing.T) {
+	f := setup(t)
+	var out api.VotoSourceList
+	f.get("/v1/voto-sources", 200, &out)
+	if out.Default != "provider-rating" || len(out.Sources) != 3 || out.Sources[0].Name != "provider-rating" || out.Sources[0].Version == "" {
+		t.Fatalf("voto sources = %+v", out)
 	}
 }
 

@@ -32,6 +32,8 @@ and fill it in.
 | `OPENFANTA_LOG_LEVEL` / `OPENFANTA_LOG_FORMAT` | `info` / `json` | Structured logging (`text` for humans) |
 | `OPENFANTA_SHUTDOWN_TIMEOUT` | `15s` | How long to drain in-flight requests on SIGTERM |
 | `OPENFANTA_MIGRATE_ON_STARTUP` | `false` | Apply migrations before `serve`/`ingest` |
+| `OPENFANTA_VOTO_SOURCES` | all three | Comma separated voto sources every fixture is scored with: `provider-rating`, `openfanta-stat`, `average` |
+| `OPENFANTA_VOTO_AVERAGE_OF` | `provider-rating,openfanta-stat` | The sources `average` takes the mean of (see [voto sources](guides/voto-sources.md)) |
 
 ### With Docker
 
@@ -76,3 +78,7 @@ dozen. Players with only a few minutes may get no rating, and are then *senza vo
 A recompute whose inputs did not change creates nothing. When something does change (a corrected
 upstream event, a change to the default settings, a parser fix), a new **run** supersedes the old one, and
 both stay queryable at `GET /v1/fixtures/{id}/runs`.
+
+The parser (version 4) also keeps each player's match position and per-player statistics (passes, duels,
+saves and so on) in the stored facts. Data ingested before that has neither, so run
+`openfanta recompute --reparse` once to fill them in from the stored raw payloads. No network access is needed.

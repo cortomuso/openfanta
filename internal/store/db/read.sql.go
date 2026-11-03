@@ -13,7 +13,7 @@ import (
 )
 
 const fixtureRuns = `-- name: FixtureRuns :many
-SELECT r.id, r.settings_sha256, r.voto_source, r.engine_version, r.input_hash,
+SELECT r.id, r.settings_sha256, r.voto_source, r.voto_source_version, r.engine_version, r.input_hash,
        r.supersedes_run_id, r.reason, r.created_at,
        EXISTS (SELECT 1 FROM current_runs cr WHERE cr.run_id = r.id) AS is_current
 FROM computation_runs r
@@ -22,15 +22,16 @@ ORDER BY r.created_at, r.id
 `
 
 type FixtureRunsRow struct {
-	ID              uuid.UUID
-	SettingsSha256  string
-	VotoSource      string
-	EngineVersion   string
-	InputHash       string
-	SupersedesRunID *uuid.UUID
-	Reason          string
-	CreatedAt       time.Time
-	IsCurrent       bool
+	ID                uuid.UUID
+	SettingsSha256    string
+	VotoSource        string
+	VotoSourceVersion string
+	EngineVersion     string
+	InputHash         string
+	SupersedesRunID   *uuid.UUID
+	Reason            string
+	CreatedAt         time.Time
+	IsCurrent         bool
 }
 
 func (q *Queries) FixtureRuns(ctx context.Context, fixtureID uuid.UUID) ([]FixtureRunsRow, error) {
@@ -46,6 +47,7 @@ func (q *Queries) FixtureRuns(ctx context.Context, fixtureID uuid.UUID) ([]Fixtu
 			&i.ID,
 			&i.SettingsSha256,
 			&i.VotoSource,
+			&i.VotoSourceVersion,
 			&i.EngineVersion,
 			&i.InputHash,
 			&i.SupersedesRunID,

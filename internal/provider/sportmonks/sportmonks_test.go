@@ -354,3 +354,75 @@ func TestParseManOfTheMatch(t *testing.T) {
 		t.Errorf("player of the match = %v, want only player 5", got)
 	}
 }
+
+func TestParseFixtureStatsAndPositions(t *testing.T) {
+	f, err := ParseFixture(raw(t, "fixture_5001_ft.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[d.PlayerID]d.Appearance{}
+	for _, a := range f.Facts.Appearances {
+		by[a.Player] = a
+	}
+
+	for id, want := range map[d.PlayerID]d.Position{
+		"1001": d.PositionGoalkeeper, "1005": d.PositionDefender,
+		"1004": d.PositionMidfielder, "1002": d.PositionForward,
+	} {
+		if got := by[id].Position; got != want {
+			t.Errorf("player %s position = %q, want %q", id, got, want)
+		}
+	}
+
+	// A stat the provider omits is 0 for a player with a statistics block.
+	if v, ok := by["1002"].Stat(d.StatTacklesWon); !ok || v != 0 {
+		t.Errorf("omitted stat = %d, %v; want 0, true", v, ok)
+	}
+	// A stat sent as 0 and one omitted look the same.
+	if _, present := by["1002"].Stats[d.StatPenaltiesWon]; present {
+		t.Error("a zero stat was stored")
+	}
+	if v, _ := by["1002"].Stat(d.StatShotsOnTarget); v != 3 {
+		t.Errorf("shots on target = %d", v)
+	}
+	// A count sent as a string is read.
+	if v, _ := by["2003"].Stat(d.StatKeyPasses); v != 1 {
+		t.Errorf("key passes sent as a string = %d", v)
+	}
+	// Chances created is kept apart from key passes.
+	if v, ok := by["1004"].Stat(d.StatKeyPasses); !ok || v != 0 {
+		t.Errorf("key passes = %d, %v", v, ok)
+	}
+	if v, _ := by["1004"].Stat(d.StatChancesCreated); v != 1 {
+		t.Errorf("chances created = %d", v)
+	}
+	// Event duplicates are never stats; the stat vocabulary has no minutes.
+	if _, ok := by["1001"].Stats["minutes"]; ok {
+		t.Error("minutes imported as a stat")
+	}
+
+	// No statistics block at all: everything is unknown.
+	for _, id := range []d.PlayerID{"1012", "2007"} {
+		if v, ok := by[id].Stat(d.StatPasses); ok || v != 0 || by[id].HasStats {
+			t.Errorf("player %s without stats: HasStats=%v stat=%d,%v", id, by[id].HasStats, v, ok)
+		}
+	}
+	// A block with only the rating and minutes still means the player took part.
+	if !by["2006"].HasStats {
+		t.Error("a reserve keeper with a rating-only block has no stats")
+	}
+}
+
+func TestParseCount(t *testing.T) {
+	for in, want := range map[string]struct {
+		n  int64
+		ok bool
+	}{
+		`7`: {7, true}, `7.0`: {7, true}, `"12"`: {12, true}, `0`: {0, true},
+		`7.5`: {0, false}, `-1`: {0, false}, `"x"`: {0, false}, `true`: {0, false}, `null`: {0, false},
+	} {
+		if n, ok := parseCount(json.RawMessage(in)); n != want.n || ok != want.ok {
+			t.Errorf("parseCount(%s) = %d, %v; want %d, %v", in, n, ok, want.n, want.ok)
+		}
+	}
+}

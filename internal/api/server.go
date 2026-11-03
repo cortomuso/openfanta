@@ -15,6 +15,7 @@ import (
 	"github.com/openfanta/openfanta/internal/engine"
 	"github.com/openfanta/openfanta/internal/settings"
 	"github.com/openfanta/openfanta/internal/store/db"
+	"github.com/openfanta/openfanta/internal/voto"
 )
 
 // DefaultVotoSource is the voto source used when none is requested.
@@ -98,6 +99,15 @@ func (s *Server) GetDefaultSettings(_ context.Context, _ GetDefaultSettingsReque
 		return nil, err
 	}
 	return GetDefaultSettings200JSONResponse{Sha256: d.SHA256, Body: body}, nil
+}
+
+// ListVotoSources implements StrictServerInterface.
+func (s *Server) ListVotoSources(_ context.Context, _ ListVotoSourcesRequestObject) (ListVotoSourcesResponseObject, error) {
+	out := ListVotoSources200JSONResponse{Default: DefaultVotoSource}
+	for _, src := range voto.Default() {
+		out.Sources = append(out.Sources, VotoSource{Name: src.Name(), Version: src.Version(), Description: src.Description()})
+	}
+	return out, nil
 }
 
 // ListSeasons implements StrictServerInterface.

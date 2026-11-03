@@ -1,5 +1,5 @@
 -- name: FixtureRuns :many
-SELECT r.id, r.settings_sha256, r.voto_source, r.engine_version, r.input_hash,
+SELECT r.id, r.settings_sha256, r.voto_source, r.voto_source_version, r.engine_version, r.input_hash,
        r.supersedes_run_id, r.reason, r.created_at,
        EXISTS (SELECT 1 FROM current_runs cr WHERE cr.run_id = r.id) AS is_current
 FROM computation_runs r

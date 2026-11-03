@@ -70,6 +70,7 @@ type Document struct {
 	Requires []string `json:"requires"`
 	Game     string   `json:"game"`
 	Roles    *Roles   `json:"roles"`
+	Voto     Voto     `json:"voto"`
 	Player   Player   `json:"player"`
 	Team     []Module `json:"team"`
 }
@@ -157,7 +158,16 @@ func (doc *Document) validate() error {
 	if err := doc.validateModules(); err != nil {
 		return err
 	}
+	if err := doc.validateVoto(); err != nil {
+		return err
+	}
 	return doc.Player.validate()
+}
+
+// schemaMinor is the minor version of a schema id such as openfanta.settings/1.2.
+func schemaMinor(schema string) int {
+	minor, _ := strconv.Atoi(strings.TrimPrefix(schema, "openfanta.settings/1."))
+	return minor
 }
 
 // minorWithModules is the first schema minor that has the `team` section.
@@ -170,7 +180,7 @@ func (doc *Document) validateModules() error {
 	if len(doc.Team) == 0 {
 		return nil
 	}
-	if minor, _ := strconv.Atoi(strings.TrimPrefix(doc.Schema, "openfanta.settings/1.")); minor < minorWithModules {
+	if minor := schemaMinor(doc.Schema); minor < minorWithModules {
 		return fmt.Errorf("team modules need schema openfanta.settings/1.%d or later, not %s", minorWithModules, doc.Schema)
 	}
 	if !slices.Contains(doc.Requires, ExprModule) {

@@ -17,16 +17,17 @@ type Competition struct {
 }
 
 type ComputationRun struct {
-	ID              uuid.UUID
-	FixtureID       uuid.UUID
-	FixtureFactsID  int64
-	VotoSource      string
-	EngineVersion   string
-	InputHash       string
-	SupersedesRunID *uuid.UUID
-	Reason          string
-	CreatedAt       time.Time
-	SettingsSha256  string
+	ID                uuid.UUID
+	FixtureID         uuid.UUID
+	FixtureFactsID    int64
+	VotoSource        string
+	EngineVersion     string
+	InputHash         string
+	SupersedesRunID   *uuid.UUID
+	Reason            string
+	CreatedAt         time.Time
+	SettingsSha256    string
+	VotoSourceVersion string
 }
 
 type CurrentRun struct {

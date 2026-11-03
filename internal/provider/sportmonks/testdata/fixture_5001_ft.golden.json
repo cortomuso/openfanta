@@ -37,96 +37,165 @@
         "team": "100",
         "role": "goalkeeper",
         "starter": true,
-        "rating": 690
+        "rating": 690,
+        "position": "gk",
+        "has_stats": true,
+        "stats": {
+          "accurate_passes": 20,
+          "ball_recoveries": 2,
+          "passes": 28,
+          "punches": 1,
+          "saves": 4,
+          "saves_inside_box": 3
+        }
       },
       {
         "player": "1002",
         "team": "100",
         "role": "outfield",
         "starter": true,
-        "rating": 810
+        "rating": 810,
+        "position": "fwd",
+        "has_stats": true,
+        "stats": {
+          "accurate_passes": 19,
+          "dispossessed": 2,
+          "dribbles": 5,
+          "dribbles_won": 3,
+          "duels": 12,
+          "duels_won": 6,
+          "key_passes": 2,
+          "passes": 22,
+          "shots_off_target": 2,
+          "shots_on_target": 3
+        }
       },
       {
         "player": "1003",
         "team": "100",
         "role": "outfield",
         "starter": true,
-        "rating": 700
+        "rating": 700,
+        "position": "mid",
+        "has_stats": true
       },
       {
         "player": "1004",
         "team": "100",
         "role": "outfield",
         "starter": true,
-        "rating": 560
+        "rating": 560,
+        "position": "mid",
+        "has_stats": true,
+        "stats": {
+          "chances_created": 1,
+          "possession_lost": 6,
+          "shots_on_target": 1
+        }
       },
       {
         "player": "1005",
         "team": "100",
         "role": "outfield",
         "starter": true,
-        "rating": 540
+        "rating": 540,
+        "position": "def",
+        "has_stats": true,
+        "stats": {
+          "accurate_passes": 40,
+          "aerials_lost": 2,
+          "aerials_won": 5,
+          "clearances": 9,
+          "fouls": 2,
+          "interceptions": 3,
+          "passes": 44,
+          "tackles": 4,
+          "tackles_won": 3
+        }
       },
       {
         "player": "1012",
         "team": "100",
         "role": "goalkeeper",
-        "starter": false
+        "starter": false,
+        "position": "gk"
       },
       {
         "player": "1013",
         "team": "100",
         "role": "outfield",
         "starter": false,
-        "rating": 724
+        "rating": 724,
+        "position": "fwd",
+        "has_stats": true
       },
       {
         "player": "2001",
         "team": "200",
         "role": "goalkeeper",
         "starter": true,
-        "rating": 630
+        "rating": 630,
+        "position": "gk",
+        "has_stats": true
       },
       {
         "player": "2002",
         "team": "200",
         "role": "outfield",
         "starter": true,
-        "rating": 500
+        "rating": 500,
+        "position": "def",
+        "has_stats": true
       },
       {
         "player": "2003",
         "team": "200",
         "role": "outfield",
         "starter": true,
-        "rating": 625
+        "rating": 625,
+        "position": "fwd",
+        "has_stats": true,
+        "stats": {
+          "fouls": 3,
+          "fouls_drawn": 4,
+          "key_passes": 1,
+          "shots_off_target": 1,
+          "shots_on_target": 2
+        }
       },
       {
         "player": "2004",
         "team": "200",
         "role": "outfield",
         "starter": true,
-        "rating": 600
+        "rating": 600,
+        "position": "mid",
+        "has_stats": true
       },
       {
         "player": "2005",
         "team": "200",
         "role": "outfield",
         "starter": true,
-        "rating": 550
+        "rating": 550,
+        "position": "def",
+        "has_stats": true
       },
       {
         "player": "2006",
         "team": "200",
         "role": "goalkeeper",
         "starter": false,
-        "rating": 600
+        "rating": 600,
+        "position": "gk",
+        "has_stats": true
       },
       {
         "player": "2007",
         "team": "200",
         "role": "outfield",
-        "starter": false
+        "starter": false,
+        "position": "mid"
       }
     ],
     "events": [

@@ -39,9 +39,12 @@ type Service struct {
 	// Settings are the rules fixtures are scored under. Nil means the Classic
 	// default until per-league scoring exists.
 	Settings *settings.Settings
-	Voto     voto.Source
-	Logger   *slog.Logger
-	Now      func() time.Time
+	// Sources are the voto sources every fixture is scored with, one run each.
+	// Nil means voto.Default(). Which of them a league uses is up to its
+	// settings (voto.source).
+	Sources []voto.Source
+	Logger  *slog.Logger
+	Now     func() time.Time
 }
 
 // Options tune an ingestion.
@@ -235,38 +238,58 @@ func toProviderRaw(p store.RawPayload) provider.Raw {
 	return provider.Raw{Key: p.RequestKey, Status: p.Status, Body: p.Body, FetchedAt: p.FetchedAt}
 }
 
-// compute scores stored facts under the service settings and records a run.
-// It returns how many new runs were created (0 or 1).
+// compute scores stored facts under the service settings, once per voto
+// source, and records a run for each. It returns how many new runs were
+// created. A failing source does not stop the others; their errors are joined.
 func (s *Service) compute(ctx context.Context, f store.Facts, reason string) (int, error) {
 	lines, err := timeline.Derive(f.Facts)
 	if err != nil {
 		return 0, err
 	}
-	votes, err := s.Voto.Votes(ctx, f.Facts)
-	if err != nil {
-		return 0, fmt.Errorf("voto source %s: %w", s.Voto.Name(), err)
-	}
 	st := s.Settings
 	if st == nil {
 		st = settings.Classic()
 	}
+	sources := s.Sources
+	if sources == nil {
+		sources = voto.Default()
+	}
+	created := 0
+	var errs []error
+	for _, src := range sources {
+		isNew, err := s.computeSource(ctx, f, lines, st, src, reason)
+		if err != nil {
+			s.Logger.ErrorContext(ctx, "voto source failed", "fixture_id", f.FixtureID, "voto_source", src.Name(), "error", err)
+			errs = append(errs, fmt.Errorf("voto source %s: %w", src.Name(), err))
+			continue
+		}
+		if isNew {
+			created++
+		}
+	}
+	return created, errors.Join(errs...)
+}
+
+func (s *Service) computeSource(ctx context.Context, f store.Facts, lines []domain.PlayerLine, st *settings.Settings, src voto.Source, reason string) (bool, error) {
+	votes, err := src.Votes(ctx, f.Facts)
+	if err != nil {
+		return false, err
+	}
+	votes = st.Doc.Voto.Rounding.ApplyAll(votes)
 	scores := engine.Compute(lines, votes, st.Doc.Player)
 	_, isNew, err := s.Store.RecordRun(ctx, store.RunInput{
-		FixtureID: f.FixtureID, FactsID: f.ID, Settings: st, VotoSource: s.Voto.Name(),
-		InputHash: inputHash(f.Hash, st, s.Voto.Name(), votes), Reason: reason, Scores: scores,
+		FixtureID: f.FixtureID, FactsID: f.ID, Settings: st, VotoSource: src.Name(), VotoSourceVersion: src.Version(),
+		InputHash: inputHash(f.Hash, st, src, votes), Reason: reason, Scores: scores,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("record run under settings %s: %w", st.SHA256, err)
+		return false, fmt.Errorf("record run under settings %s: %w", st.SHA256, err)
 	}
-	if isNew {
-		return 1, nil
-	}
-	return 0, nil
+	return isNew, nil
 }
 
 // inputHash identifies everything that determines a run's result. Two runs
 // with the same hash are guaranteed to have identical scores.
-func inputHash(factsHash string, st *settings.Settings, votoSource string, votes map[domain.PlayerID]domain.Points) string {
+func inputHash(factsHash string, st *settings.Settings, src voto.Source, votes map[domain.PlayerID]domain.Points) string {
 	players := make([]string, 0, len(votes))
 	for p := range votes {
 		players = append(players, string(p))
@@ -278,7 +301,7 @@ func inputHash(factsHash string, st *settings.Settings, votoSource string, votes
 	}
 	b, _ := json.Marshal(map[string]any{
 		"facts": factsHash, "settings": st.SHA256,
-		"voto_source": votoSource, "votes": pairs, "engine": engine.Version,
+		"voto_source": src.Name(), "voto_source_version": src.Version(), "votes": pairs, "engine": engine.Version,
 	})
 	return domain.SHA256Hex(b)
 }

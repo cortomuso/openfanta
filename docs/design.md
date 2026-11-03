@@ -72,9 +72,19 @@ Code: `internal/store/migrations/`, `store.RecordRun` in `internal/store/store.g
 
 ### 2.6 Voto source
 The engine never fetches voti; the shell resolves them and passes them in as data, so sources can
-be swapped (a CSV/manual source later) without touching the engine. Voto is the provider rating
-unrounded at two decimals; rounding is a league setting (§9).
-Code: `internal/voto/voto.go`, `parseRating` in `internal/provider/sportmonks/parse.go`.
+be swapped without touching the engine. Three sources exist: `provider-rating` (the Sportmonks rating
+unrounded at two decimals), `openfanta-stat` (OpenFanta's own rating from match events, per-player
+statistics and the team result; no add-ons, no coordinates) and `average` (the mean of its children,
+none when a child has no voto). Ingest scores each fixture with every configured source
+(`OPENFANTA_VOTO_SOURCES`, `OPENFANTA_VOTO_AVERAGE_OF`) and records the source's `Version()` on the run, so a
+tuned model never replaces the numbers of an old one. A league's settings choose which run it reads
+(`voto.source`) and how it is rounded (`voto.rounding`, §9); rounding is integer arithmetic applied to the
+source's voto before the engine runs. `GET /v1/voto-sources` lists the sources.
+Providers send per-player statistics in the facts (`Appearance.Position`, `Stats`, `HasStats`); a stat the
+provider omits is 0 for a player with a block. How the model works and how to change its parameters:
+[the voto sources guide](guides/voto-sources.md).
+Code: `internal/voto/voto.go`, `internal/voto/openstat/`, `settings.Rounding` in `internal/settings/voto.go`,
+`parseRating` and `statTypes` in `internal/provider/sportmonks/parse.go`.
 
 ### 2.7 API style: REST + OpenAPI, spec-first
 `api/openapi.yaml` is the contract and the server is generated from it. It is OpenAPI **3.0.3**,
@@ -102,7 +112,7 @@ graceful shutdown: `serve` in `cmd/openfanta/main.go`. Upstream retries, backoff
 
 ## 7. Open questions
 1. **Sportmonks plan:** Serie A isn't on the free plan. Will you take the Starter plan or the 14-day trial? A token is needed to record fixtures and for the DoD real-matchday run.
-2. **Player rating availability:** confirm that rating (118) is included in the chosen plan. If not, voto falls back to s.v. for everyone, and we need a different VotoSource.
+2. ~~**Player rating availability**~~ Answered 2026-11-03: rating (118) is returned on the plan for nearly every player who played (0 to 2 per match lack it); those players are s.v. for `provider-rating`. `openfanta-stat` and `average` exist for the same gaps.
 3. **Redistribution:** read the Sportmonks ToS (or ask them) before any public deployment of provider-rating-based voti.
 4. **Classic defaults (interim scorer only):** confirm the s.v. policy (voto d'ufficio 6 for a goal, 4 for a red card), the clean-sheet minimum minutes (proposed: any minutes, with 0 conceded while on pitch), and the penalty-scored value (proposed 300, same as goal).
 5. ~~**Licence**~~: decided, **AGPL-3.0** (see `LICENSE`).
@@ -162,6 +172,9 @@ A full example document (a Classic league, and how Mantra fits the same structur
 
 - **2026-10-27: licence AGPL-3.0** (chosen by the owner).
 - **2026-10-27: base voto at two-decimal precision.** `voto` is the provider rating unrounded (`6.38`). Rounding moved from the voto source into league settings.
+- **2026-11-03: voto source and rounding live in the settings document** (`voto.source`, `voto.rounding`, schema 1.2), so they are part of the settings hash and a change is a new run. A document without `voto` is provider rating, unrounded, which keeps the Classic hash. Only the source's voto is rounded, never a voto d'ufficio. There is no editorial source: Sportmonks has none, so the second and third sources are derived from the match.
+- **2026-11-03: three voto sources, none using Sportmonks add-ons.** `provider-rating`, `openfanta-stat` and `average` (default children: the other two; every child must have a voto). `openfanta-stat` uses only what `lineups.details` returns, with weights that are engineering priors and are not fitted to `provider-rating`, so the average combines two independent opinions. Events stay the single source of truth for goals, assists, cards, penalties and minutes; the provider's duplicates are not imported. Calibration of the weights is a separate issue.
+- **2026-11-03: Sportmonks omits zero-valued stats**, verified on eight Serie A matches. For a player with a statistics block an absent stat is 0; without a block it is unknown and `openfanta-stat` gives no voto.
 - **2026-10-27: the server is the source of truth for leagues** and computes fantavoti from per-league settings (a brief proposal to compute fantavoti on clients was dropped, because members using different clients must get identical results).
 - **2026-10-27: no retroactive rule changes**; closed matchdays change only through logged owner/admin corrections; all inputs freeze at matchday close.
 - **2026-10-27: rounding is a league setting**; stage-1 results may be shared across leagues, pending a benchmark.

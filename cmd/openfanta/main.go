@@ -117,8 +117,12 @@ func newService(ctx context.Context, cfg config.Config, log *slog.Logger, needPr
 	if cfg.SportmonksURL != "" {
 		sm.BaseURL = cfg.SportmonksURL
 	}
+	sources, err := voto.Build(cfg.VotoSources, cfg.VotoAverageOf)
+	if err != nil {
+		return nil, nil, err
+	}
 	svc := &ingest.Service{
-		Store: st, Provider: sm, Voto: voto.NewProviderRating(),
+		Store: st, Provider: sm, Sources: sources,
 		Logger: log, Now: time.Now,
 	}
 	return svc, st.Close, nil

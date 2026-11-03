@@ -49,6 +49,58 @@ func (c AssistClass) Valid() bool {
 	return c == AssistOpenPlay || c == AssistSetPiece || c == AssistContribution
 }
 
+// Position is the position a player held in a match, as the provider reports
+// it. It is not the fantacalcio listone role, and the zero value means unknown.
+type Position string
+
+// Positions.
+const (
+	PositionGoalkeeper Position = "gk"
+	PositionDefender   Position = "def"
+	PositionMidfielder Position = "mid"
+	PositionForward    Position = "fwd"
+)
+
+// StatKey names a per-player match statistic. Goals, assists, cards, own
+// goals, penalties scored or missed and minutes are not here: events are the
+// single source of truth for those.
+type StatKey string
+
+// Stat keys. All are non-negative counts for the match.
+const (
+	StatPasses             StatKey = "passes"
+	StatAccuratePasses     StatKey = "accurate_passes"
+	StatKeyPasses          StatKey = "key_passes"
+	StatChancesCreated     StatKey = "chances_created"
+	StatTouches            StatKey = "touches"
+	StatShotsOnTarget      StatKey = "shots_on_target"
+	StatShotsOffTarget     StatKey = "shots_off_target"
+	StatBlockedShots       StatKey = "blocked_shots"
+	StatDribbles           StatKey = "dribbles"
+	StatDribblesWon        StatKey = "dribbles_won"
+	StatDribbledPast       StatKey = "dribbled_past"
+	StatDispossessed       StatKey = "dispossessed"
+	StatPossessionLost     StatKey = "possession_lost"
+	StatDuels              StatKey = "duels"
+	StatDuelsWon           StatKey = "duels_won"
+	StatAerialsWon         StatKey = "aerials_won"
+	StatAerialsLost        StatKey = "aerials_lost"
+	StatTackles            StatKey = "tackles"
+	StatTacklesWon         StatKey = "tackles_won"
+	StatInterceptions      StatKey = "interceptions"
+	StatClearances         StatKey = "clearances"
+	StatBallRecoveries     StatKey = "ball_recoveries"
+	StatFouls              StatKey = "fouls"
+	StatFoulsDrawn         StatKey = "fouls_drawn"
+	StatPenaltiesWon       StatKey = "penalties_won"
+	StatPenaltiesCommitted StatKey = "penalties_committed"
+	StatErrorsToGoal       StatKey = "errors_to_goal"
+	StatErrorsToShot       StatKey = "errors_to_shot"
+	StatSaves              StatKey = "saves"
+	StatSavesInsideBox     StatKey = "saves_inside_box"
+	StatPunches            StatKey = "punches"
+)
+
 // Event is one match event. Events are ordered by Seq, which must be unique in
 // a match; Minute is only used to measure minutes played.
 type Event struct {
@@ -74,6 +126,24 @@ type Appearance struct {
 	Rating *Points `json:"rating,omitempty"`
 	// PlayerOfTheMatch is set when the provider names this player man of the match.
 	PlayerOfTheMatch bool `json:"player_of_the_match,omitempty"`
+	// Position is the provider's match position; "" when unknown.
+	Position Position `json:"position,omitempty"`
+	// HasStats is set when the provider sent a statistics block for this
+	// player. Providers leave out stats that are zero, so for such a player a
+	// key missing from Stats is 0. Without the block (a bench player who never
+	// played) every stat is unknown.
+	HasStats bool `json:"has_stats,omitempty"`
+	// Stats holds the non-zero statistics the provider sent.
+	Stats map[StatKey]int64 `json:"stats,omitempty"`
+}
+
+// Stat returns the value of k and whether it is known. A player with a
+// statistics block has every stat known, with 0 for those the provider omitted.
+func (a Appearance) Stat(k StatKey) (int64, bool) {
+	if !a.HasStats {
+		return 0, false
+	}
+	return a.Stats[k], true
 }
 
 // MatchFacts is the provider-agnostic description of a finished match: the

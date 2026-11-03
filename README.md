@@ -37,6 +37,7 @@ Running the server, configuration and the CLI are covered in [Getting started](d
 | Run, configure, CLI | [docs/getting-started.md](docs/getting-started.md) |
 | API conventions and spec | [docs/api-overview.md](docs/api-overview.md), [`api/openapi.yaml`](api/openapi.yaml) |
 | League settings, changing values | [docs/settings.md](docs/settings.md), [docs/guides/changing-default-settings.md](docs/guides/changing-default-settings.md) |
+| Voto sources, the openfanta-stat model | [docs/guides/voto-sources.md](docs/guides/voto-sources.md) |
 | Adding a data provider | [docs/guides/adding-a-provider.md](docs/guides/adding-a-provider.md) |
 | Project layout | [docs/project-layout.md](docs/project-layout.md) |
 | Design, decisions, open questions | [docs/design.md](docs/design.md) |

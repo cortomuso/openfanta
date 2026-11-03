@@ -15,7 +15,7 @@ import (
 
 // parserVersion must change whenever parsing can produce different output
 // from the same payload.
-const parserVersion = "3"
+const parserVersion = "4"
 
 // ErrParse wraps every parsing failure.
 var ErrParse = errors.New("sportmonks: cannot parse payload")
@@ -37,10 +37,60 @@ const (
 	lineupBench   = 12
 
 	positionGoalkeeper = 24
+	positionDefender   = 25
+	positionMidfielder = 26
+	positionAttacker   = 27
 
 	detailRating     = 118
 	detailManOfMatch = 1490 // data.value is 1 for the man of the match; most fixtures have none
 )
+
+// positions maps Sportmonks position types (verified against /core/types).
+var positions = map[int]domain.Position{
+	positionGoalkeeper: domain.PositionGoalkeeper,
+	positionDefender:   domain.PositionDefender,
+	positionMidfielder: domain.PositionMidfielder,
+	positionAttacker:   domain.PositionForward,
+}
+
+// statTypes maps the lineups.details types kept as player stats. The IDs and
+// names were checked against /core/types and a real finished Serie A fixture.
+// Types that duplicate events (goals 52, assists 79, cards 83/84/85, minutes
+// 119, penalties scored 111 and missed 112, own goals 324) are deliberately
+// absent: events are the single source of truth for those.
+var statTypes = map[int]domain.StatKey{
+	80:    domain.StatPasses,
+	116:   domain.StatAccuratePasses,
+	117:   domain.StatKeyPasses,
+	9706:  domain.StatChancesCreated,
+	120:   domain.StatTouches,
+	86:    domain.StatShotsOnTarget,
+	41:    domain.StatShotsOffTarget,
+	97:    domain.StatBlockedShots,
+	108:   domain.StatDribbles, // "Dribble Attempts"
+	109:   domain.StatDribblesWon,
+	110:   domain.StatDribbledPast,
+	94:    domain.StatDispossessed,
+	27273: domain.StatPossessionLost,
+	105:   domain.StatDuels,
+	106:   domain.StatDuelsWon,
+	107:   domain.StatAerialsWon,
+	27266: domain.StatAerialsLost,
+	78:    domain.StatTackles,
+	27267: domain.StatTacklesWon,
+	100:   domain.StatInterceptions,
+	101:   domain.StatClearances,
+	27271: domain.StatBallRecoveries,
+	56:    domain.StatFouls,
+	96:    domain.StatFoulsDrawn,
+	115:   domain.StatPenaltiesWon,
+	114:   domain.StatPenaltiesCommitted,
+	571:   domain.StatErrorsToGoal,
+	48997: domain.StatErrorsToShot,
+	57:    domain.StatSaves,
+	104:   domain.StatSavesInsideBox,
+	103:   domain.StatPunches,
+}
 
 // Fixture states after which a match is over.
 var finalStates = map[string]bool{"FT": true, "AET": true, "FT_PEN": true}
@@ -224,7 +274,21 @@ func ParseFixture(r provider.Raw) (provider.Fixture, error) {
 		app := domain.Appearance{
 			Player: domain.PlayerID(ref), Team: domain.TeamID(l.TeamID.String()), Role: role, Starter: l.TypeID == lineupStarter,
 		}
+		if l.PositionID != nil {
+			app.Position = positions[*l.PositionID]
+		}
+		// A statistics block means the player took part; the provider leaves
+		// out the stats that are zero, so the block itself is what matters.
+		app.HasStats = len(l.Details) > 0
 		for _, d := range l.Details {
+			if key, ok := statTypes[d.TypeID]; ok {
+				if n, ok := parseCount(d.Data.Value); ok && n > 0 {
+					if app.Stats == nil {
+						app.Stats = map[domain.StatKey]int64{}
+					}
+					app.Stats[key] = n
+				}
+			}
 			if d.TypeID == detailRating {
 				if p, ok := parseRating(d.Data.Value); ok {
 					app.Rating = &p
@@ -358,4 +422,22 @@ func parseRating(raw json.RawMessage) (domain.Points, bool) {
 		return 0, false
 	}
 	return domain.Points(math.Round(v * 100)), true
+}
+
+// parseCount reads a non-negative whole number such as 12 or "12". Anything
+// else (a fraction, a negative, text) is not a count and is ignored.
+func parseCount(raw json.RawMessage) (int64, bool) {
+	var n json.Number
+	if json.Unmarshal(raw, &n) != nil {
+		var s string
+		if json.Unmarshal(raw, &s) != nil {
+			return 0, false
+		}
+		n = json.Number(s)
+	}
+	v, err := n.Float64()
+	if err != nil || v < 0 || v != math.Trunc(v) || v > 1<<31 {
+		return 0, false
+	}
+	return int64(v), true
 }

@@ -202,9 +202,11 @@ type RunInput struct {
 	FactsID    int64
 	Settings   *settings.Settings
 	VotoSource string
-	InputHash  string // identifies all inputs; equal hashes mean an identical result
-	Reason     string
-	Scores     []engine.Score
+	// VotoSourceVersion is the source's Version(); it is part of InputHash.
+	VotoSourceVersion string
+	InputHash         string // identifies all inputs; equal hashes mean an identical result
+	Reason            string
+	Scores            []engine.Score
 }
 
 // RecordRun stores a computation and makes it current, unless the current run
@@ -235,7 +237,7 @@ func (s *Store) RecordRun(ctx context.Context, in RunInput) (uuid.UUID, bool, er
 		}
 		if err := q.InsertRun(ctx, db.InsertRunParams{
 			ID: runID, FixtureID: in.FixtureID, FixtureFactsID: in.FactsID,
-			SettingsSha256: in.Settings.SHA256, VotoSource: in.VotoSource,
+			SettingsSha256: in.Settings.SHA256, VotoSource: in.VotoSource, VotoSourceVersion: in.VotoSourceVersion,
 			EngineVersion: engine.Version, InputHash: in.InputHash, SupersedesRunID: supersedes,
 			Reason: in.Reason, CreatedAt: s.now(),
 		}); err != nil {
