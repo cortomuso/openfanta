@@ -257,6 +257,9 @@ paths:
       tags: [catalog]
       operationId: getPlayer
       summary: Get a player
+      description: |
+        Club, roles, birth year and status come from the teams' squads and are empty or `unknown`
+        for a player the squads never named.
       parameters:
         - $ref: "#/components/parameters/PlayerId"
       responses:
@@ -264,7 +267,7 @@ paths:
           description: The player.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Ref" }
+              schema: { $ref: "#/components/schemas/Player" }
         "400":
           $ref: "#/components/responses/Problem"
         "404":
@@ -363,6 +366,38 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
+    PlayerRole:
+      type: string
+      enum: [P, D, C, A]
+      description: The role catalog, as listed on a listone. P goalkeeper, D defender, C midfielder, A attacker.
+    Player:
+      type: object
+      required: [id, name, roles, club, birth_year, status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/PlayerRole" }
+          description: |
+            Listed roles, most important first. Empty when the provider gives none. The provider
+            lists one position per player, so a dual-role player has two entries only once another
+            source or a league override says so.
+        club:
+          allOf: [{ $ref: "#/components/schemas/Ref" }]
+          nullable: true
+          description: The team the player is listed with in their latest season; null when unknown.
+        birth_year:
+          type: integer
+          nullable: true
+          description: Null when the provider does not give a birth date.
+        status:
+          type: string
+          enum: [listed, no_longer_listed, unknown]
+          description: |
+            `listed` while the latest squad entry is open, `no_longer_listed` once the player has
+            left the club's squad (rules for released players apply), `unknown` for a player no
+            squad has named.
     Season:
       type: object
       required: [id, name, competition]

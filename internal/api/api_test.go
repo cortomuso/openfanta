@@ -52,6 +52,9 @@ func setup(t *testing.T) *fixture {
 	if _, err := svc.IngestMatchday(ctx, "777", 1, ingest.Options{}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := svc.IngestSquads(ctx, "777", ingest.Options{}); err != nil {
+		t.Fatal(err)
+	}
 
 	spec, err := api.GetSwagger()
 	if err != nil {
@@ -408,5 +411,37 @@ func TestSeasonsPagination(t *testing.T) {
 	f.get("/v1/seasons?limit=1", 200, &page)
 	if len(page.Seasons) != 1 {
 		t.Fatalf("limit=1 returned %d seasons", len(page.Seasons))
+	}
+}
+
+func TestPlayerProfile(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	var list api.ScoreList
+	f.get("/v1/seasons/"+seasons.Seasons[0].Id+"/matchdays/1/scores", 200, &list)
+	byName := map[string]string{}
+	for _, s := range list.Scores {
+		byName[s.Player.Name] = s.Player.Id
+	}
+	get := func(name string) api.Player {
+		t.Helper()
+		var p api.Player
+		f.get("/v1/players/"+byName[name], 200, &p)
+		return p
+	}
+
+	k := get("Home Keeper")
+	if k.Club == nil || k.Club.Name != "Home FC" || len(k.Roles) != 1 || k.Roles[0] != api.P ||
+		k.BirthYear == nil || *k.BirthYear != 1998 || k.Status != api.Listed {
+		t.Errorf("Home Keeper = %+v", k)
+	}
+	// Named by the squad with no position or birth date: nothing is invented.
+	if m := get("Home Midfielder"); len(m.Roles) != 0 || m.BirthYear != nil || m.Status != api.Listed || m.Club == nil {
+		t.Errorf("Home Midfielder = %+v", m)
+	}
+	// Played, but no squad names the player.
+	if u := get("Away Defender"); u.Club != nil || u.Status != api.Unknown || u.Roles == nil || len(u.Roles) != 0 {
+		t.Errorf("Away Defender = %+v", u)
 	}
 }

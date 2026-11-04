@@ -307,6 +307,18 @@ func inputHash(factsHash string, st *settings.Settings, src voto.Source, votes m
 }
 
 func (s *Service) upsertMatchday(ctx context.Context, q *db.Queries, season provider.Season, matchday int) (uuid.UUID, error) {
+	seasonID, err := s.upsertSeason(ctx, q, season)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	fresh, err := uuid.NewV7()
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return q.UpsertMatchday(ctx, db.UpsertMatchdayParams{ID: fresh, SeasonID: seasonID, Number: int32(matchday)})
+}
+
+func (s *Service) upsertSeason(ctx context.Context, q *db.Queries, season provider.Season) (uuid.UUID, error) {
 	p := s.Provider.Name()
 	compID, err := store.Resolve(ctx, q, p, "competition", season.CompetitionRef)
 	if err != nil {
@@ -322,11 +334,7 @@ func (s *Service) upsertMatchday(ctx context.Context, q *db.Queries, season prov
 	if err := q.UpsertSeason(ctx, db.UpsertSeasonParams{ID: seasonID, CompetitionID: compID, Name: season.Name}); err != nil {
 		return uuid.Nil, err
 	}
-	fresh, err := uuid.NewV7()
-	if err != nil {
-		return uuid.Nil, err
-	}
-	return q.UpsertMatchday(ctx, db.UpsertMatchdayParams{ID: fresh, SeasonID: seasonID, Number: int32(matchday)})
+	return seasonID, nil
 }
 
 // upsertFixture stores teams, players and the fixture, and returns the facts

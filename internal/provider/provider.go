@@ -38,6 +38,29 @@ type Provider interface {
 
 	FetchFixture(ctx context.Context, fixtureRef string) (Raw, error)
 	ParseFixture(r Raw) (Fixture, error)
+
+	// FetchSquad fetches the players a team lists in a season: who they are,
+	// their role, birth date and whether they are still with the team.
+	FetchSquad(ctx context.Context, seasonRef, teamRef string) (Raw, error)
+	ParseSquad(r Raw) (Squad, error)
+}
+
+// Squad is the list of players a team has in one season.
+type Squad struct {
+	Members []SquadMember
+}
+
+// SquadMember is one player of a squad. Fields the provider does not give are
+// left empty, never guessed.
+type SquadMember struct {
+	PlayerRef string
+	Name      string
+	// Role is the player's position in the P/D/C/A catalog; empty when the
+	// provider gives none.
+	Role      domain.CatalogRole
+	BirthYear *int
+	// Listed is false once the player has left the team.
+	Listed bool
 }
 
 // Season describes a season of a competition.

@@ -174,13 +174,44 @@ func (q *Queries) GetFixture(ctx context.Context, id uuid.UUID) (GetFixtureRow, 
 }
 
 const getPlayer = `-- name: GetPlayer :one
-SELECT id, name FROM players WHERE id = $1
+SELECT id, name, birth_year FROM players WHERE id = $1
 `
 
 func (q *Queries) GetPlayer(ctx context.Context, id uuid.UUID) (Player, error) {
 	row := q.db.QueryRow(ctx, getPlayer, id)
 	var i Player
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(&i.ID, &i.Name, &i.BirthYear)
+	return i, err
+}
+
+const getPlayerLatestSquadEntry = `-- name: GetPlayerLatestSquadEntry :one
+SELECT x.team_id AS club_id, t.name AS club_name, x.role, x.listed
+FROM player_seasons x
+JOIN seasons s ON s.id = x.season_id
+JOIN teams t ON t.id = x.team_id
+WHERE x.player_id = $1
+ORDER BY s.name DESC, s.id DESC
+LIMIT 1
+`
+
+type GetPlayerLatestSquadEntryRow struct {
+	ClubID   uuid.UUID
+	ClubName string
+	Role     *string
+	Listed   bool
+}
+
+// The club, role and status of a player's latest season in the squads; no row for a player no
+// squad ever named.
+func (q *Queries) GetPlayerLatestSquadEntry(ctx context.Context, playerID uuid.UUID) (GetPlayerLatestSquadEntryRow, error) {
+	row := q.db.QueryRow(ctx, getPlayerLatestSquadEntry, playerID)
+	var i GetPlayerLatestSquadEntryRow
+	err := row.Scan(
+		&i.ClubID,
+		&i.ClubName,
+		&i.Role,
+		&i.Listed,
+	)
 	return i, err
 }
 
@@ -539,6 +570,48 @@ func (q *Queries) SeasonFixtures(ctx context.Context, seasonID uuid.UUID) ([]Sea
 			&i.AwayID,
 			&i.AwayName,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const seasonTeamRefs = `-- name: SeasonTeamRefs :many
+SELECT DISTINCT r.external_id, t.id, t.name
+FROM matchdays m
+JOIN fixtures f ON f.matchday_id = m.id
+JOIN teams t ON t.id IN (f.home_team_id, f.away_team_id)
+JOIN provider_refs r ON r.entity = 'team' AND r.entity_id = t.id AND r.provider = $2
+WHERE m.season_id = $1
+ORDER BY r.external_id
+`
+
+type SeasonTeamRefsParams struct {
+	SeasonID uuid.UUID
+	Provider string
+}
+
+type SeasonTeamRefsRow struct {
+	ExternalID string
+	ID         uuid.UUID
+	Name       string
+}
+
+// The provider refs of the teams that play in a season, for fetching their squads.
+func (q *Queries) SeasonTeamRefs(ctx context.Context, arg SeasonTeamRefsParams) ([]SeasonTeamRefsRow, error) {
+	rows, err := q.db.Query(ctx, seasonTeamRefs, arg.SeasonID, arg.Provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SeasonTeamRefsRow
+	for rows.Next() {
+		var i SeasonTeamRefsRow
+		if err := rows.Scan(&i.ExternalID, &i.ID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

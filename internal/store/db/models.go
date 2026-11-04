@@ -109,8 +109,9 @@ type Matchday struct {
 }
 
 type Player struct {
-	ID   uuid.UUID
-	Name string
+	ID        uuid.UUID
+	Name      string
+	BirthYear *int16
 }
 
 type PlayerScore struct {
@@ -139,6 +140,14 @@ type PlayerScore struct {
 	DecisiveGoalsWin    int32
 	DecisiveGoalsDraw   int32
 	PlayerOfTheMatch    bool
+}
+
+type PlayerSeason struct {
+	SeasonID uuid.UUID
+	PlayerID uuid.UUID
+	TeamID   uuid.UUID
+	Role     *string
+	Listed   bool
 }
 
 type ProviderRef struct {

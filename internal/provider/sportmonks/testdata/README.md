@@ -10,6 +10,7 @@ no API token was available when the parser was built. Team and player names are 
 | `schedule_777.json` | `GET /schedules/seasons/777` |
 | `fixture_5001_ft.json` | `GET /fixtures/5001?include=participants;lineups.details;events;state` (finished) |
 | `fixture_5001_live.json` | The same fixture while in play |
+| `squad_777_100.json`, `squad_777_200.json` | `GET /squads/seasons/777/teams/{100,200}?include=player` (shape written from the documented Squads endpoint, not from a live response) |
 | `fixture_5001_ft.golden.json` | Expected `ParseFixture` output; regenerate with `go test ./internal/provider/sportmonks -update` |
 
 The finished fixture deliberately covers: a goal with an assist, a scored penalty, a missed

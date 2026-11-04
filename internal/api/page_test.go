@@ -3,6 +3,8 @@ package api
 import (
 	"strconv"
 	"testing"
+
+	"github.com/openfanta/openfanta/internal/store/db"
 )
 
 func ids(n int) []string {
@@ -76,5 +78,17 @@ func TestPaginateRejectsBadInput(t *testing.T) {
 		if _, _, err := paginate(ids(3), id, &l, nil); err == nil {
 			t.Errorf("limit %d accepted", l)
 		}
+	}
+}
+
+func TestPlayerStatusFromSquadEntry(t *testing.T) {
+	p := db.Player{Name: "Gone"}
+	role := "D"
+	left := player(p, &db.GetPlayerLatestSquadEntryRow{ClubName: "Home FC", Role: &role, Listed: false})
+	if left.Status != NoLongerListed || left.Club == nil || len(left.Roles) != 1 || left.Roles[0] != D {
+		t.Errorf("left = %+v", left)
+	}
+	if nobody := player(p, nil); nobody.Status != Unknown || nobody.Club != nil || nobody.Roles == nil {
+		t.Errorf("no squad entry = %+v", nobody)
 	}
 }

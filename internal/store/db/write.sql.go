@@ -538,6 +538,49 @@ func (q *Queries) UpsertPlayer(ctx context.Context, arg UpsertPlayerParams) erro
 	return err
 }
 
+const upsertPlayerProfile = `-- name: UpsertPlayerProfile :exec
+INSERT INTO players (id, name, birth_year) VALUES ($1, $2, $3)
+ON CONFLICT (id) DO UPDATE SET birth_year = COALESCE(EXCLUDED.birth_year, players.birth_year)
+`
+
+type UpsertPlayerProfileParams struct {
+	ID        uuid.UUID
+	Name      string
+	BirthYear *int16
+}
+
+// Squad data may name a player the fixtures never did; the birth year is kept when a later
+// payload does not give one.
+func (q *Queries) UpsertPlayerProfile(ctx context.Context, arg UpsertPlayerProfileParams) error {
+	_, err := q.db.Exec(ctx, upsertPlayerProfile, arg.ID, arg.Name, arg.BirthYear)
+	return err
+}
+
+const upsertPlayerSeason = `-- name: UpsertPlayerSeason :exec
+INSERT INTO player_seasons (season_id, player_id, team_id, role, listed) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (season_id, player_id) DO UPDATE SET
+    team_id = EXCLUDED.team_id, role = EXCLUDED.role, listed = EXCLUDED.listed
+`
+
+type UpsertPlayerSeasonParams struct {
+	SeasonID uuid.UUID
+	PlayerID uuid.UUID
+	TeamID   uuid.UUID
+	Role     *string
+	Listed   bool
+}
+
+func (q *Queries) UpsertPlayerSeason(ctx context.Context, arg UpsertPlayerSeasonParams) error {
+	_, err := q.db.Exec(ctx, upsertPlayerSeason,
+		arg.SeasonID,
+		arg.PlayerID,
+		arg.TeamID,
+		arg.Role,
+		arg.Listed,
+	)
+	return err
+}
+
 const upsertSeason = `-- name: UpsertSeason :exec
 INSERT INTO seasons (id, competition_id, name) VALUES ($1, $2, $3)
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name

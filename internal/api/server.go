@@ -299,7 +299,36 @@ func (s *Server) GetPlayer(ctx context.Context, req GetPlayerRequestObject) (Get
 	if err != nil {
 		return nil, err
 	}
-	return GetPlayer200JSONResponse{Id: p.ID.String(), Name: p.Name}, nil
+	var squad *db.GetPlayerLatestSquadEntryRow
+	switch e, err := s.q.GetPlayerLatestSquadEntry(ctx, req.PlayerId); {
+	case err == nil:
+		squad = &e
+	case !errors.Is(err, pgx.ErrNoRows):
+		return nil, err
+	}
+	return GetPlayer200JSONResponse(player(p, squad)), nil
+}
+
+// player maps the stored profile to the API. Roles, club and status stay empty or unknown
+// when no squad named the player: nothing is guessed from match data.
+func player(p db.Player, squad *db.GetPlayerLatestSquadEntryRow) Player {
+	out := Player{Id: p.ID.String(), Name: p.Name, Roles: []PlayerRole{}, Status: Unknown}
+	if p.BirthYear != nil {
+		y := int(*p.BirthYear)
+		out.BirthYear = &y
+	}
+	if squad == nil {
+		return out
+	}
+	out.Club = &Ref{Id: squad.ClubID.String(), Name: squad.ClubName}
+	if squad.Role != nil {
+		out.Roles = append(out.Roles, PlayerRole(*squad.Role))
+	}
+	out.Status = NoLongerListed
+	if squad.Listed {
+		out.Status = Listed
+	}
+	return out
 }
 
 // badPageError carries a limit or cursor error so handlers answer 400 instead of 500.

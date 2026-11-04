@@ -451,3 +451,41 @@ func TestParseFixtureExceptions(t *testing.T) {
 		}
 	}
 }
+
+func TestParseSquad(t *testing.T) {
+	r := raw(t, "squad_777_100.json")
+	r.FetchedAt = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	sq, err := ParseSquad(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]provider.SquadMember{}
+	for _, m := range sq.Members {
+		by[m.PlayerRef] = m
+	}
+	if len(by) != 6 {
+		t.Fatalf("members = %d", len(by))
+	}
+	gk := by["1001"]
+	if gk.Name != "Home Keeper" || gk.Role != d.CatalogGoalkeeper || gk.BirthYear == nil || *gk.BirthYear != 1998 || !gk.Listed {
+		t.Errorf("keeper = %+v", gk)
+	}
+	for ref, want := range map[string]d.CatalogRole{"1002": "A", "1003": "C", "1005": "D"} {
+		if by[ref].Role != want {
+			t.Errorf("%s role = %q, want %q", ref, by[ref].Role, want)
+		}
+	}
+	if m := by["1004"]; m.Role != "" || m.BirthYear != nil || !m.Listed {
+		t.Errorf("player without position and birth date = %+v (missing data must stay empty)", m)
+	}
+	if by["1099"].Listed {
+		t.Errorf("player whose squad entry ended in January is still listed: %+v", by["1099"])
+	}
+}
+
+func TestParseSquadRejectsBadEndDate(t *testing.T) {
+	_, err := ParseSquad(provider.Raw{Key: "k", Body: []byte(`{"data":[{"player_id":1,"end":"soon"}]}`)})
+	if !errors.Is(err, ErrParse) {
+		t.Fatalf("err = %v", err)
+	}
+}

@@ -45,7 +45,28 @@ ORDER BY m.number, f.kickoff, f.id;
 SELECT EXISTS (SELECT 1 FROM matchdays WHERE season_id = $1 AND number = $2);
 
 -- name: GetPlayer :one
-SELECT id, name FROM players WHERE id = $1;
+SELECT id, name, birth_year FROM players WHERE id = $1;
+
+-- name: GetPlayerLatestSquadEntry :one
+-- The club, role and status of a player's latest season in the squads; no row for a player no
+-- squad ever named.
+SELECT x.team_id AS club_id, t.name AS club_name, x.role, x.listed
+FROM player_seasons x
+JOIN seasons s ON s.id = x.season_id
+JOIN teams t ON t.id = x.team_id
+WHERE x.player_id = $1
+ORDER BY s.name DESC, s.id DESC
+LIMIT 1;
+
+-- name: SeasonTeamRefs :many
+-- The provider refs of the teams that play in a season, for fetching their squads.
+SELECT DISTINCT r.external_id, t.id, t.name
+FROM matchdays m
+JOIN fixtures f ON f.matchday_id = m.id
+JOIN teams t ON t.id IN (f.home_team_id, f.away_team_id)
+JOIN provider_refs r ON r.entity = 'team' AND r.entity_id = t.id AND r.provider = $2
+WHERE m.season_id = $1
+ORDER BY r.external_id;
 
 -- name: GetFixture :one
 SELECT f.id, f.kickoff, f.status, f.exception, m.number AS matchday, m.season_id,

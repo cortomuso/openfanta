@@ -17,6 +17,8 @@ type Provider interface {
     ParseSchedule(Raw) (Schedule, error)        // matchday number -> fixture refs
     FetchFixture(ctx, fixtureRef) (Raw, error)
     ParseFixture(Raw) (Fixture, error)          // the important one
+    FetchSquad(ctx, seasonRef, teamRef) (Raw, error)
+    ParseSquad(Raw) (Squad, error)              // a team's players: role, birth year, still listed
 }
 ```
 
@@ -37,3 +39,19 @@ Steps:
 
 Ingest owns caching, ID mapping (provider IDs never leak into the API) and versioning, so a
 provider needs none of that.
+
+## Squads and the player profile
+
+`ParseSquad` feeds the player profile (`roles`, `club`, `birth_year`, `status`). Fill only what
+the provider gives; leave the rest empty, because the API shows missing data as empty or `unknown`
+and never guesses it.
+
+- `Role` is the P/D/C/A catalog (`domain.CatalogRole`): map the provider's position to it.
+  Sportmonks gives one position per player (24 goalkeeper, 25 defender, 26 midfielder, 27
+  attacker), so every player has at most one role. Dual roles need another source.
+- `Listed` is false once the player has left the team (Sportmonks: the squad entry has an `end`
+  date in the past). That is what the API reports as `no_longer_listed`.
+- `BirthYear` is the year of the provider's birth date.
+
+Squads are stored per season, so they are also the club history. Run `openfanta squads --season S`
+after a matchday of that season is ingested.

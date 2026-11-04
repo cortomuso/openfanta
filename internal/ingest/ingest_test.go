@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/openfanta/openfanta/internal/provider/httpx"
 	"github.com/openfanta/openfanta/internal/provider/sportmonks"
@@ -372,5 +373,79 @@ func TestUnknownMatchday(t *testing.T) {
 	svc := newService(t, st, srv, nil)
 	if _, err := svc.IngestMatchday(ctx, "777", 38, Options{}); err == nil {
 		t.Fatal("expected an error for a matchday without fixtures")
+	}
+}
+
+func TestIngestSquadsStoresClubRoleAndBirthYear(t *testing.T) {
+	st, dbURL := storetest.New(t)
+	up, srv := smtest.New(t)
+	svc := newService(t, st, srv, nil)
+
+	if _, err := svc.IngestSquads(ctx, "777", Options{}); err == nil || !strings.Contains(err.Error(), "ingest a matchday first") {
+		t.Fatalf("squads before any fixture: err = %v", err)
+	}
+	if _, err := svc.IngestMatchday(ctx, "777", 1, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := svc.IngestSquads(ctx, "777", Options{})
+	if err != nil || rep.Teams != 2 || rep.Players != 8 || len(rep.Failed) != 0 {
+		t.Fatalf("report = %+v, err = %v", rep, err)
+	}
+
+	type row struct {
+		club, role string
+		listed     bool
+		birth      *int16
+	}
+	got := map[string]row{}
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	rows, err := conn.Query(ctx, `SELECT p.name, t.name, COALESCE(ps.role, ''), ps.listed, p.birth_year
+		FROM player_seasons ps JOIN players p ON p.id = ps.player_id JOIN teams t ON t.id = ps.team_id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		var r row
+		if err := rows.Scan(&name, &r.club, &r.role, &r.listed, &r.birth); err != nil {
+			t.Fatal(err)
+		}
+		got[name] = r
+	}
+	if k := got["Home Keeper"]; k.club != "Home FC" || k.role != "P" || !k.listed || k.birth == nil || *k.birth != 1998 {
+		t.Errorf("Home Keeper = %+v", k)
+	}
+	if d := got["Home Departed"]; d.listed || d.role != "D" {
+		t.Errorf("Home Departed = %+v", d)
+	}
+	if m := got["Home Midfielder"]; m.role != "" || m.birth != nil {
+		t.Errorf("Home Midfielder = %+v: missing provider data must stay empty", m)
+	}
+
+	// A second run inside the cache window does not call the provider again.
+	if _, err := svc.IngestSquads(ctx, "777", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if n := up.Count("/squads/seasons/777/teams/100"); n != 1 {
+		t.Errorf("squad requested %d times, want 1 (cached)", n)
+	}
+}
+
+func TestIngestSquadsReportsAFailingTeam(t *testing.T) {
+	st, _ := storetest.New(t)
+	up, srv := smtest.New(t)
+	svc := newService(t, st, srv, nil)
+	if _, err := svc.IngestMatchday(ctx, "777", 1, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	up.Set("/squads/seasons/777/teams/200", `{"data":[{"player_id":1,"end":"soon"}]}`)
+	rep, err := svc.IngestSquads(ctx, "777", Options{})
+	if err != nil || rep.Teams != 1 || rep.Failed["200"] == nil {
+		t.Fatalf("report = %+v, err = %v", rep, err)
 	}
 }
