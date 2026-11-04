@@ -71,6 +71,7 @@ dozen. Players with only a few minutes may get no rating, and are then *senza vo
 |---|---|
 | `openfanta migrate` | Applies database migrations |
 | `openfanta ingest --season S --matchday N [--refresh]` | Fetches a matchday, stores raw payloads, computes fantavoti for finished fixtures. Finished fixtures are cached forever; `--refresh` re-fetches them to pick up upstream corrections |
+| `openfanta squads --season S [--refresh]` | Fetches every team's squad of a season (teams come from the fixtures already ingested): each player's club, role (P/D/C/A), birth year and whether they are still listed (for the running season this reads every team's current squad too). Squads are reused for 24 hours |
 | `openfanta recompute [--reparse] [--season-id UUID] [--reason TEXT]` | Recomputes stored fixtures under the default settings with no network access. `--reparse` re-parses stored raw payloads first (after a parser fix) |
 | `openfanta settings` | Prints the default league settings document (canonical JSON) |
 | `openfanta serve` | Serves the API |

@@ -38,6 +38,47 @@ type Provider interface {
 
 	FetchFixture(ctx context.Context, fixtureRef string) (Raw, error)
 	ParseFixture(r Raw) (Fixture, error)
+
+	// FetchSquad fetches the players a team lists in a season: who they are,
+	// their role and birth date. A player who moved during the season can be in
+	// the squads of two teams.
+	FetchSquad(ctx context.Context, seasonRef, teamRef string) (Raw, error)
+	ParseSquad(r Raw) (Squad, error)
+
+	// FetchCurrentSquad fetches the players a team has now, which tells where a
+	// player who moved plays today and who has left. It only describes the
+	// current season.
+	FetchCurrentSquad(ctx context.Context, teamRef string) (Raw, error)
+	ParseCurrentSquad(r Raw) (CurrentSquad, error)
+}
+
+// Squad is the list of players a team has in one season.
+type Squad struct {
+	Members []SquadMember
+}
+
+// SquadMember is one player of a squad. Fields the provider does not give are
+// left empty, never guessed.
+type SquadMember struct {
+	PlayerRef string
+	Name      string
+	// Role is the player's position in the P/D/C/A catalog; empty when the
+	// provider gives none.
+	Role      domain.CatalogRole
+	BirthYear *int
+}
+
+// CurrentSquad is the list of players a team has now.
+type CurrentSquad struct {
+	Members []CurrentMember
+}
+
+// CurrentMember is one player of the current squad.
+type CurrentMember struct {
+	PlayerRef string
+	// Until is when the player's contract with the team ends; nil when the
+	// provider gives no end. A player whose contract has ended is not listed.
+	Until *time.Time
 }
 
 // Season describes a season of a competition.
@@ -47,6 +88,9 @@ type Season struct {
 	CompetitionRef     string
 	CompetitionName    string
 	CompetitionCountry string
+	// Current is true while this is the competition's running season; only then
+	// does a team's current squad describe it.
+	Current bool
 }
 
 // Schedule maps matchday numbers to fixture refs.
@@ -67,9 +111,13 @@ type Fixture struct {
 	Status string
 	// Exception is set when the match was postponed or suspended.
 	Exception domain.Exception
-	Kickoff   *time.Time
-	Home      Team
-	Away      Team
-	Players   map[string]string // player ref -> name
-	Facts     domain.MatchFacts
+	// Period is how far the match has got, from the provider's state.
+	Period domain.Period
+	// Score is the provider's current score; nil when it gives none.
+	Score   *domain.Score
+	Kickoff *time.Time
+	Home    Team
+	Away    Team
+	Players map[string]string // player ref -> name
+	Facts   domain.MatchFacts
 }

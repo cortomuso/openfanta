@@ -35,6 +35,7 @@ commands:
   serve       serve the read-only HTTP API
   migrate     apply database migrations
   ingest      fetch one matchday from the provider and compute fantavoti
+  squads      fetch every team's squad of a season: club, role and birth year of players
   recompute   recompute stored fixtures under the default settings
   settings    print the default league settings document (canonical JSON)
 
@@ -78,6 +79,8 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return nil
 	case "ingest":
 		return runIngest(ctx, cfg, log, rest, stdout)
+	case "squads":
+		return runSquads(ctx, cfg, log, rest, stdout)
 	case "recompute":
 		return runRecompute(ctx, cfg, log, rest, stdout)
 	case "settings":
@@ -151,6 +154,37 @@ func runIngest(ctx context.Context, cfg config.Config, log *slog.Logger, args []
 		return err
 	}
 	return printReport(stdout, rep)
+}
+
+func runSquads(ctx context.Context, cfg config.Config, log *slog.Logger, args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("squads", flag.ContinueOnError)
+	fs.SetOutput(stdout)
+	season := fs.String("season", "", "provider season ID (required); a matchday of it must be ingested first")
+	refresh := fs.Bool("refresh", false, "re-fetch squads even when a recent copy is stored")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *season == "" {
+		fs.Usage()
+		return fmt.Errorf("%w: --season is required", errUsage)
+	}
+	svc, closeFn, err := newService(ctx, cfg, log, true)
+	if err != nil {
+		return err
+	}
+	defer closeFn()
+	rep, err := svc.IngestSquads(ctx, *season, ingest.Options{Refresh: *refresh})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "%d squads, %d players, %d failed\n", rep.Teams, rep.Players, len(rep.Failed))
+	for ref, err := range rep.Failed {
+		fmt.Fprintf(stdout, "team %s: %v\n", ref, err)
+	}
+	if len(rep.Failed) > 0 {
+		return fmt.Errorf("%d squads failed", len(rep.Failed))
+	}
+	return nil
 }
 
 func runRecompute(ctx context.Context, cfg config.Config, log *slog.Logger, args []string, stdout io.Writer) error {

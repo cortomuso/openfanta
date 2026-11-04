@@ -3,6 +3,11 @@
   "Final": true,
   "Status": "FT",
   "Exception": "",
+  "Period": "finished",
+  "Score": {
+    "Home": 2,
+    "Away": 2
+  },
   "Kickoff": "2026-08-23T18:45:00Z",
   "Home": {
     "Ref": "100",

@@ -31,12 +31,13 @@ INSERT INTO players (id, name) VALUES ($1, $2)
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
 
 -- name: UpsertFixture :exec
-INSERT INTO fixtures (id, matchday_id, home_team_id, away_team_id, kickoff, status, exception)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO fixtures (id, matchday_id, home_team_id, away_team_id, kickoff, status, exception, home_score, away_score, period)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (id) DO UPDATE SET
     matchday_id = EXCLUDED.matchday_id, home_team_id = EXCLUDED.home_team_id,
     away_team_id = EXCLUDED.away_team_id, kickoff = EXCLUDED.kickoff, status = EXCLUDED.status,
-    exception = EXCLUDED.exception;
+    exception = EXCLUDED.exception, home_score = EXCLUDED.home_score, away_score = EXCLUDED.away_score,
+    period = EXCLUDED.period;
 
 -- name: InsertRawPayload :one
 INSERT INTO raw_payloads (provider, request_key, sha256, http_status, body, fetched_at, last_seen_at)
@@ -117,3 +118,14 @@ INSERT INTO settings_versions (
     effective_from_matchday, author, reason, created_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
+
+-- name: UpsertPlayerProfile :exec
+-- Squad data may name a player the fixtures never did; the birth year is kept when a later
+-- payload does not give one.
+INSERT INTO players (id, name, birth_year) VALUES ($1, $2, $3)
+ON CONFLICT (id) DO UPDATE SET birth_year = COALESCE(EXCLUDED.birth_year, players.birth_year);
+
+-- name: UpsertPlayerSeason :exec
+INSERT INTO player_seasons (season_id, player_id, team_id, role, listed) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (season_id, player_id) DO UPDATE SET
+    team_id = EXCLUDED.team_id, role = EXCLUDED.role, listed = EXCLUDED.listed;

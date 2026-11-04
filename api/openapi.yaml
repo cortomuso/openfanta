@@ -13,6 +13,10 @@ info:
       default uses the provider rating unrounded.
     - Rule set bodies are returned as published: point values there are integer hundredths.
     - Errors use RFC 9457 `application/problem+json`.
+    - Lists take `limit` (1 to 200) and an opaque `cursor`, and answer `next_cursor` while more
+      rows follow. Pass `next_cursor` back as `cursor` for the next page; never build or parse
+      one. A request with neither parameter returns the whole list. Order is fixed and documented
+      per endpoint, so pages never overlap.
     - Responses carry an `ETag`; send `If-None-Match` to get `304 Not Modified`.
   license:
     name: AGPL-3.0
@@ -120,9 +124,12 @@ paths:
       tags: [catalog]
       operationId: listSeasons
       summary: List seasons
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
-          description: Seasons with ingested data.
+          description: Seasons with ingested data, ordered by competition name, then season name (newest first).
           content:
             application/json:
               schema:
@@ -132,6 +139,9 @@ paths:
                   seasons:
                     type: array
                     items: { $ref: "#/components/schemas/Season" }
+                  next_cursor: { $ref: "#/components/schemas/NextCursor" }
+        "400":
+          $ref: "#/components/responses/Problem"
   /v1/seasons/{seasonId}/matchdays:
     get:
       tags: [catalog]
@@ -165,6 +175,8 @@ paths:
         - $ref: "#/components/parameters/SeasonId"
         - { name: number, in: path, required: true, schema: { type: integer, minimum: 1 } }
         - $ref: "#/components/parameters/VotoSourceQuery"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
           description: Scores, ordered by fixture kickoff, team and player name.
@@ -184,12 +196,44 @@ paths:
         - $ref: "#/components/parameters/SeasonId"
         - $ref: "#/components/parameters/PlayerId"
         - $ref: "#/components/parameters/VotoSourceQuery"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
           description: Scores ordered by matchday.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ScoreList" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /v1/seasons/{seasonId}/players/{playerId}/stats:
+    get:
+      tags: [scores]
+      operationId: getPlayerSeasonStats
+      summary: A player's season statistics
+      description: |
+        Averages and totals over the player's current scores in the season, under the default
+        settings. A player with no scores in the season gets zeros and null averages. League
+        settings will scope this per league once leagues score under their own (M2).
+      parameters:
+        - $ref: "#/components/parameters/SeasonId"
+        - $ref: "#/components/parameters/PlayerId"
+        - $ref: "#/components/parameters/VotoSourceQuery"
+      responses:
+        "200":
+          description: The statistics.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [player, settings_sha256, voto_source, stats]
+                properties:
+                  player: { $ref: "#/components/schemas/Ref" }
+                  settings_sha256: { type: string }
+                  voto_source: { type: string }
+                  stats: { $ref: "#/components/schemas/SeasonStats" }
         "400":
           $ref: "#/components/responses/Problem"
         "404":
@@ -202,6 +246,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/FixtureId"
         - $ref: "#/components/parameters/VotoSourceQuery"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
           description: Scores ordered by team and player name.
@@ -241,6 +287,9 @@ paths:
       tags: [catalog]
       operationId: getPlayer
       summary: Get a player
+      description: |
+        Club, roles, birth year and status come from the teams' squads and are empty or `unknown`
+        for a player the squads never named.
       parameters:
         - $ref: "#/components/parameters/PlayerId"
       responses:
@@ -248,7 +297,112 @@ paths:
           description: The player.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Ref" }
+              schema: { $ref: "#/components/schemas/Player" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+
+  /v1/players:
+    get:
+      tags: [catalog]
+      operationId: listPlayers
+      summary: Search and browse players
+      description: |
+        Ordered by name. Club, role and status are those of the season in `season`, else of each
+        player's latest season. `role` and `club` therefore match the squad entry of that season,
+        and `season` keeps only players listed in it. Players no squad has named are only found
+        without `role`, `club` and `season`. A page is 50 players unless `limit` says otherwise.
+
+        `sort` is `name` (default) or an average, `avg_voto` or `avg_fantavoto`, highest first with
+        players that have none last; ties go by name. Averages are those of the season described
+        above, under the default settings and the `voto_source`. `include=stats` adds each
+        player's `stats` for that season.
+      parameters:
+        - { name: q, in: query, description: Case-insensitive text in the name., schema: { type: string, minLength: 1, maxLength: 100 } }
+        - { name: role, in: query, schema: { $ref: "#/components/schemas/PlayerRole" } }
+        - { name: club, in: query, description: A club id., schema: { type: string, format: uuid } }
+        - { name: season, in: query, description: A season id., schema: { type: string, format: uuid } }
+        - { name: birth_year_from, in: query, schema: { type: integer, minimum: 1900, maximum: 2100 } }
+        - { name: birth_year_to, in: query, schema: { type: integer, minimum: 1900, maximum: 2100 } }
+        - { name: sort, in: query, schema: { type: string, enum: [name, avg_voto, avg_fantavoto], default: name } }
+        - { name: include, in: query, schema: { type: string, enum: [stats] } }
+        - $ref: "#/components/parameters/VotoSourceQuery"
+        - name: limit
+          in: query
+          description: Page size, 1 to 200; 50 when omitted.
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of players.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [players]
+                properties:
+                  players:
+                    type: array
+                    items: { $ref: "#/components/schemas/PlayerSummary" }
+                  next_cursor: { $ref: "#/components/schemas/NextCursor" }
+        "400":
+          $ref: "#/components/responses/Problem"
+  /v1/clubs:
+    get:
+      tags: [catalog]
+      operationId: listClubs
+      summary: List clubs
+      description: Clubs are the teams of the ingested competitions, ordered by name.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Clubs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [clubs]
+                properties:
+                  clubs:
+                    type: array
+                    items: { $ref: "#/components/schemas/Ref" }
+                  next_cursor: { $ref: "#/components/schemas/NextCursor" }
+        "400":
+          $ref: "#/components/responses/Problem"
+  /v1/clubs/{clubId}/players:
+    get:
+      tags: [catalog]
+      operationId: listClubPlayers
+      summary: A club's squad in a season
+      description: |
+        The players the club lists in the season, ordered by name. Players who have left the squad
+        are included and flagged `no_longer_listed`, so rules for released players can apply.
+        Without `season` the club's latest season with a squad is used.
+      parameters:
+        - { name: clubId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: season, in: query, description: A season id., schema: { type: string, format: uuid } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: The squad. `season` is null for a club that has no squad yet.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [club, season, players]
+                properties:
+                  club: { $ref: "#/components/schemas/Ref" }
+                  season:
+                    allOf: [{ $ref: "#/components/schemas/Season" }]
+                    nullable: true
+                  players:
+                    type: array
+                    items: { $ref: "#/components/schemas/SquadPlayer" }
+                  next_cursor: { $ref: "#/components/schemas/NextCursor" }
         "400":
           $ref: "#/components/responses/Problem"
         "404":
@@ -262,6 +416,16 @@ components:
       { name: playerId, in: path, required: true, schema: { type: string, format: uuid } }
     FixtureId:
       { name: fixtureId, in: path, required: true, schema: { type: string, format: uuid } }
+    Limit:
+      name: limit
+      in: query
+      description: Page size, 1 to 200. Without `limit` and `cursor` the whole list is returned.
+      schema: { type: integer, minimum: 1, maximum: 200 }
+    Cursor:
+      name: cursor
+      in: query
+      description: The `next_cursor` of the previous page.
+      schema: { type: string }
     VotoSourceQuery:
       name: voto_source
       in: query
@@ -324,6 +488,9 @@ components:
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
+    NextCursor:
+      type: string
+      description: Present when more rows follow; pass it as `cursor` to get them.
     Decimal:
       type: string
       pattern: "^-?[0-9]+\\.[0-9]{2}$"
@@ -334,6 +501,127 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
+    PlayerRole:
+      type: string
+      enum: [P, D, C, A]
+      description: The role catalog, as listed on a listone. P goalkeeper, D defender, C midfielder, A attacker.
+    PlayerStatus:
+      type: string
+      enum: [listed, no_longer_listed, unknown]
+      description: |
+        `listed` while a team's current squad has the player under contract, `no_longer_listed` once
+        no current squad has them (rules for released players apply), `unknown` for a player no
+        squad has named. For a finished season every player of its squads is `listed`.
+    SquadPlayer:
+      type: object
+      required: [player, roles, birth_year, status]
+      properties:
+        player: { $ref: "#/components/schemas/Ref" }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/PlayerRole" }
+        birth_year: { type: integer, nullable: true }
+        status: { $ref: "#/components/schemas/PlayerStatus" }
+    PlayerSummary:
+      type: object
+      required: [id, name, roles, club, birth_year, status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/PlayerRole" }
+        club:
+          allOf: [{ $ref: "#/components/schemas/Ref" }]
+          nullable: true
+        birth_year: { type: integer, nullable: true }
+        status: { $ref: "#/components/schemas/PlayerStatus" }
+        stats:
+          allOf: [{ $ref: "#/components/schemas/SeasonStats" }]
+          nullable: true
+          description: Only with `include=stats`; null for a player with no season to measure.
+    SeasonStats:
+      type: object
+      required: [season, appearances, minutes, games_with_voto, avg_voto, avg_fantavoto, totals]
+      properties:
+        season:
+          type: object
+          required: [id]
+          properties:
+            id: { type: string }
+        appearances: { type: integer, minimum: 0, description: Matches with minutes on the pitch. }
+        minutes: { type: integer, minimum: 0 }
+        games_with_voto: { type: integer, minimum: 0, description: "Matches with a voto, a voto d'ufficio included." }
+        avg_voto:
+          allOf: [{ $ref: "#/components/schemas/Decimal" }]
+          nullable: true
+          description: Mean voto over the games with voto, rounded half up; null without any.
+        avg_fantavoto:
+          allOf: [{ $ref: "#/components/schemas/Decimal" }]
+          nullable: true
+          description: Mean fantavoto over the games with voto, rounded half up; null without any.
+        totals: { $ref: "#/components/schemas/StatTotals" }
+    StatTotals:
+      type: object
+      description: Sums of the match stats (see PlayerMatchStats) over the season.
+      required: [goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, assists_set_piece, assists_contribution, yellow_cards, sent_off, goals_conceded, clean_sheets, decisive_goals_win, decisive_goals_draw, player_of_the_match]
+      properties:
+        goals: { type: integer, minimum: 0 }
+        penalties_scored: { type: integer, minimum: 0 }
+        penalties_missed: { type: integer, minimum: 0 }
+        penalties_saved: { type: integer, minimum: 0 }
+        own_goals: { type: integer, minimum: 0 }
+        assists: { type: integer, minimum: 0 }
+        assists_set_piece: { type: integer, minimum: 0 }
+        assists_contribution: { type: integer, minimum: 0 }
+        yellow_cards: { type: integer, minimum: 0 }
+        sent_off: { type: integer, minimum: 0, description: Matches in which the player was sent off. }
+        goals_conceded: { type: integer, minimum: 0 }
+        clean_sheets: { type: integer, minimum: 0 }
+        decisive_goals_win: { type: integer, minimum: 0 }
+        decisive_goals_draw: { type: integer, minimum: 0 }
+        player_of_the_match: { type: integer, minimum: 0 }
+    ClubSeason:
+      type: object
+      required: [season, club, roles, status]
+      properties:
+        season:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string, example: 2026/2027 }
+        club: { $ref: "#/components/schemas/Ref" }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/PlayerRole" }
+        status: { $ref: "#/components/schemas/PlayerStatus" }
+    Player:
+      type: object
+      required: [id, name, roles, club, club_history, birth_year, status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/PlayerRole" }
+          description: |
+            Listed roles, most important first. Empty when the provider gives none. The provider
+            lists one position per player, so a dual-role player has two entries only once another
+            source or a league override says so.
+        club:
+          allOf: [{ $ref: "#/components/schemas/Ref" }]
+          nullable: true
+          description: The team the player is listed with in their latest season; null when unknown.
+        birth_year:
+          type: integer
+          nullable: true
+          description: Null when the provider does not give a birth date.
+        status: { $ref: "#/components/schemas/PlayerStatus" }
+        club_history:
+          type: array
+          items: { $ref: "#/components/schemas/ClubSeason" }
+          description: The club the player was listed with in each season, latest first. Empty when no squad named the player.
     Season:
       type: object
       required: [id, name, competition]
@@ -354,12 +642,30 @@ components:
         id: { type: string }
         matchday: { type: integer }
         kickoff: { type: string, format: date-time, nullable: true }
-        status: { type: string, description: "Provider status, e.g. FT" }
+        status: { type: string, description: "Provider status, such as NS (not started), INPLAY_1ST_HALF, HT, INPLAY_2ND_HALF, FT, AET, FT_PEN, POSTPONED, SUSPENDED" }
         exception:
           type: string
           enum: [postponed, suspended]
           nullable: true
           description: Set when the real match was postponed or suspended; the league's real-match policy applies to it.
+        period:
+          type: string
+          enum: [not_started, first_half, half_time, second_half, extra_time, penalties, finished]
+          nullable: true
+          description: |
+            How far the match has got, derived from the provider status; null when the status says
+            nothing about it (postponed, suspended, cancelled, unknown states). `extra_time` covers
+            the break before it, `penalties` the shoot-out.
+        score:
+          type: object
+          nullable: true
+          description: |
+            The provider's current score: the final one once `period` is `finished`. It includes
+            extra time and never counts a shoot-out. Null until the provider reports one.
+          required: [home, away]
+          properties:
+            home: { type: integer, minimum: 0 }
+            away: { type: integer, minimum: 0 }
         home: { $ref: "#/components/schemas/Ref" }
         away: { $ref: "#/components/schemas/Ref" }
     Matchday:
@@ -439,6 +745,7 @@ components:
         scores:
           type: array
           items: { $ref: "#/components/schemas/Score" }
+        next_cursor: { $ref: "#/components/schemas/NextCursor" }
     Run:
       type: object
       required: [id, settings_sha256, voto_source, engine_version, input_hash, reason, created_at, current]

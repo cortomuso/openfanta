@@ -1,0 +1,28 @@
+{
+  "data": [
+    {
+      "id": 200000,
+      "transfer_id": null,
+      "player_id": 2001,
+      "team_id": 200,
+      "position_id": 24,
+      "detailed_position_id": null,
+      "start": "2025-07-01",
+      "end": "2027-06-30",
+      "captain": false,
+      "jersey_number": 1
+    },
+    {
+      "id": 200001,
+      "transfer_id": null,
+      "player_id": 2003,
+      "team_id": 200,
+      "position_id": 27,
+      "detailed_position_id": null,
+      "start": "2025-07-01",
+      "end": "2029-06-30",
+      "captain": false,
+      "jersey_number": 3
+    }
+  ]
+}

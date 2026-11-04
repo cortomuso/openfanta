@@ -13,11 +13,20 @@ GET /v1/seasons
 GET /v1/seasons/{seasonId}/matchdays
 GET /v1/seasons/{seasonId}/matchdays/{n}/scores?voto_source=provider-rating
 GET /v1/seasons/{seasonId}/players/{playerId}/scores
+GET /v1/seasons/{seasonId}/players/{playerId}/stats
 GET /v1/fixtures/{fixtureId}/scores
 GET /v1/fixtures/{fixtureId}/runs
+GET /v1/players?q=&role=&club=&season=&birth_year_from=&birth_year_to=
+GET /v1/players/{playerId}   roles (P/D/C/A), club, birth_year, status
+GET /v1/clubs
+GET /v1/clubs/{clubId}/players?season=
 GET /v1/settings/default
 GET /healthz                GET /readyz
 ```
+
+Lists take `limit` (1 to 200) and an opaque `cursor`; while more rows follow the response has a
+`next_cursor`, which you pass back as `cursor`. Without either parameter you get the whole list.
+Never build or parse a cursor, and a bad `limit` or `cursor` is a `400` problem.
 
 Scores are decimal strings with two digits (`"6.38"`), never floats. `voto` is the provider
 rating unrounded; each score also carries the player's match `stats` (goals, assists, cards,

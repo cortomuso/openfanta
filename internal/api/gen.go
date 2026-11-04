@@ -60,6 +60,84 @@ func (e FixtureException) Valid() bool {
 	}
 }
 
+// Defines values for FixturePeriod.
+const (
+	ExtraTime  FixturePeriod = "extra_time"
+	Finished   FixturePeriod = "finished"
+	FirstHalf  FixturePeriod = "first_half"
+	HalfTime   FixturePeriod = "half_time"
+	NotStarted FixturePeriod = "not_started"
+	Penalties  FixturePeriod = "penalties"
+	SecondHalf FixturePeriod = "second_half"
+)
+
+// Valid indicates whether the value is a known member of the FixturePeriod enum.
+func (e FixturePeriod) Valid() bool {
+	switch e {
+	case ExtraTime:
+		return true
+	case Finished:
+		return true
+	case FirstHalf:
+		return true
+	case HalfTime:
+		return true
+	case NotStarted:
+		return true
+	case Penalties:
+		return true
+	case SecondHalf:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PlayerRole.
+const (
+	A PlayerRole = "A"
+	C PlayerRole = "C"
+	D PlayerRole = "D"
+	P PlayerRole = "P"
+)
+
+// Valid indicates whether the value is a known member of the PlayerRole enum.
+func (e PlayerRole) Valid() bool {
+	switch e {
+	case A:
+		return true
+	case C:
+		return true
+	case D:
+		return true
+	case P:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PlayerStatus.
+const (
+	Listed         PlayerStatus = "listed"
+	NoLongerListed PlayerStatus = "no_longer_listed"
+	Unknown        PlayerStatus = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the PlayerStatus enum.
+func (e PlayerStatus) Valid() bool {
+	switch e {
+	case Listed:
+		return true
+	case NoLongerListed:
+		return true
+	case Unknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ScoreRole.
 const (
 	Goalkeeper ScoreRole = "goalkeeper"
@@ -78,6 +156,42 @@ func (e ScoreRole) Valid() bool {
 	}
 }
 
+// Defines values for ListPlayersParamsSort.
+const (
+	AvgFantavoto ListPlayersParamsSort = "avg_fantavoto"
+	AvgVoto      ListPlayersParamsSort = "avg_voto"
+	Name         ListPlayersParamsSort = "name"
+)
+
+// Valid indicates whether the value is a known member of the ListPlayersParamsSort enum.
+func (e ListPlayersParamsSort) Valid() bool {
+	switch e {
+	case AvgFantavoto:
+		return true
+	case AvgVoto:
+		return true
+	case Name:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListPlayersParamsInclude.
+const (
+	Stats ListPlayersParamsInclude = "stats"
+)
+
+// Valid indicates whether the value is a known member of the ListPlayersParamsInclude enum.
+func (e ListPlayersParamsInclude) Valid() bool {
+	switch e {
+	case Stats:
+		return true
+	default:
+		return false
+	}
+}
+
 // BreakdownItem defines model for BreakdownItem.
 type BreakdownItem struct {
 	// Code A scoring code
@@ -88,6 +202,23 @@ type BreakdownItem struct {
 
 	// Points Example: 6.38
 	Points Decimal `json:"points"`
+}
+
+// ClubSeason defines model for ClubSeason.
+type ClubSeason struct {
+	Club   Ref          `json:"club"`
+	Roles  []PlayerRole `json:"roles"`
+	Season struct {
+		Id string `json:"id"`
+
+		// Name Example: 2026/2027
+		Name string `json:"name"`
+	} `json:"season"`
+
+	// Status `listed` while a team's current squad has the player under contract, `no_longer_listed` once
+	// no current squad has them (rules for released players apply), `unknown` for a player no
+	// squad has named. For a finished season every player of its squads is `listed`.
+	Status PlayerStatus `json:"status"`
 }
 
 // Decimal Example: 6.38
@@ -120,12 +251,29 @@ type Fixture struct {
 	Kickoff   *time.Time        `json:"kickoff,omitempty"`
 	Matchday  int               `json:"matchday"`
 
-	// Status Provider status, e.g. FT
+	// Period How far the match has got, derived from the provider status; null when the status says
+	// nothing about it (postponed, suspended, cancelled, unknown states). `extra_time` covers
+	// the break before it, `penalties` the shoot-out.
+	Period *FixturePeriod `json:"period,omitempty"`
+
+	// Score The provider's current score: the final one once `period` is `finished`. It includes
+	// extra time and never counts a shoot-out. Null until the provider reports one.
+	Score *struct {
+		Away int `json:"away"`
+		Home int `json:"home"`
+	} `json:"score,omitempty"`
+
+	// Status Provider status, such as NS (not started), INPLAY_1ST_HALF, HT, INPLAY_2ND_HALF, FT, AET, FT_PEN, POSTPONED, SUSPENDED
 	Status string `json:"status"`
 }
 
 // FixtureException Set when the real match was postponed or suspended; the league's real-match policy applies to it.
 type FixtureException string
+
+// FixturePeriod How far the match has got, derived from the provider status; null when the status says
+// nothing about it (postponed, suspended, cancelled, unknown states). `extra_time` covers
+// the break before it, `penalties` the shoot-out.
+type FixturePeriod string
 
 // Health defines model for Health.
 type Health struct {
@@ -142,6 +290,33 @@ type Matchday struct {
 // MatchdayExceptions defines model for MatchdayExceptions.
 type MatchdayExceptions struct {
 	Overrides []ExceptionOverride `json:"overrides"`
+}
+
+// NextCursor Present when more rows follow; pass it as `cursor` to get them.
+type NextCursor = string
+
+// Player defines model for Player.
+type Player struct {
+	// BirthYear Null when the provider does not give a birth date.
+	BirthYear *int `json:"birth_year"`
+
+	// Club The team the player is listed with in their latest season; null when unknown.
+	Club *Ref `json:"club"`
+
+	// ClubHistory The club the player was listed with in each season, latest first. Empty when no squad named the player.
+	ClubHistory []ClubSeason `json:"club_history"`
+	Id          string       `json:"id"`
+	Name        string       `json:"name"`
+
+	// Roles Listed roles, most important first. Empty when the provider gives none. The provider
+	// lists one position per player, so a dual-role player has two entries only once another
+	// source or a league override says so.
+	Roles []PlayerRole `json:"roles"`
+
+	// Status `listed` while a team's current squad has the player under contract, `no_longer_listed` once
+	// no current squad has them (rules for released players apply), `unknown` for a player no
+	// squad has named. For a finished season every player of its squads is `listed`.
+	Status PlayerStatus `json:"status"`
 }
 
 // PlayerMatchStats What the player did in the match, as derived from provider events. Shoot-outs never count.
@@ -186,6 +361,31 @@ type PlayerMatchStats struct {
 
 	// YellowCards Includes a second yellow
 	YellowCards int `json:"yellow_cards"`
+}
+
+// PlayerRole The role catalog, as listed on a listone. P goalkeeper, D defender, C midfielder, A attacker.
+type PlayerRole string
+
+// PlayerStatus `listed` while a team's current squad has the player under contract, `no_longer_listed` once
+// no current squad has them (rules for released players apply), `unknown` for a player no
+// squad has named. For a finished season every player of its squads is `listed`.
+type PlayerStatus string
+
+// PlayerSummary defines model for PlayerSummary.
+type PlayerSummary struct {
+	BirthYear *int         `json:"birth_year"`
+	Club      *Ref         `json:"club"`
+	Id        string       `json:"id"`
+	Name      string       `json:"name"`
+	Roles     []PlayerRole `json:"roles"`
+
+	// Stats Only with `include=stats`; null for a player with no season to measure.
+	Stats *SeasonStats `json:"stats,omitempty"`
+
+	// Status `listed` while a team's current squad has the player under contract, `no_longer_listed` once
+	// no current squad has them (rules for released players apply), `unknown` for a player no
+	// squad has named. For a finished season every player of its squads is `listed`.
+	Status PlayerStatus `json:"status"`
 }
 
 // Problem defines model for Problem.
@@ -255,9 +455,11 @@ type ScoreRole string
 
 // ScoreList defines model for ScoreList.
 type ScoreList struct {
-	Scores         []Score `json:"scores"`
-	SettingsSha256 string  `json:"settings_sha256"`
-	VotoSource     string  `json:"voto_source"`
+	// NextCursor Present when more rows follow; pass it as `cursor` to get them.
+	NextCursor     *NextCursor `json:"next_cursor,omitempty"`
+	Scores         []Score     `json:"scores"`
+	SettingsSha256 string      `json:"settings_sha256"`
+	VotoSource     string      `json:"voto_source"`
 }
 
 // Season defines model for Season.
@@ -273,6 +475,28 @@ type Season struct {
 	Name string `json:"name"`
 }
 
+// SeasonStats defines model for SeasonStats.
+type SeasonStats struct {
+	// Appearances Matches with minutes on the pitch.
+	Appearances int `json:"appearances"`
+
+	// AvgFantavoto Mean fantavoto over the games with voto, rounded half up; null without any.
+	AvgFantavoto *Decimal `json:"avg_fantavoto"`
+
+	// AvgVoto Mean voto over the games with voto, rounded half up; null without any.
+	AvgVoto *Decimal `json:"avg_voto"`
+
+	// GamesWithVoto Matches with a voto, a voto d'ufficio included.
+	GamesWithVoto int `json:"games_with_voto"`
+	Minutes       int `json:"minutes"`
+	Season        struct {
+		Id string `json:"id"`
+	} `json:"season"`
+
+	// Totals Sums of the match stats (see PlayerMatchStats) over the season.
+	Totals StatTotals `json:"totals"`
+}
+
 // Settings defines model for Settings.
 type Settings struct {
 	// Body The settings document; see internal/settings/schema/v1.json. Point values are integer hundredths.
@@ -280,6 +504,39 @@ type Settings struct {
 
 	// Sha256 sha256 of the canonical JSON of body
 	Sha256 string `json:"sha256"`
+}
+
+// SquadPlayer defines model for SquadPlayer.
+type SquadPlayer struct {
+	BirthYear *int         `json:"birth_year"`
+	Player    Ref          `json:"player"`
+	Roles     []PlayerRole `json:"roles"`
+
+	// Status `listed` while a team's current squad has the player under contract, `no_longer_listed` once
+	// no current squad has them (rules for released players apply), `unknown` for a player no
+	// squad has named. For a finished season every player of its squads is `listed`.
+	Status PlayerStatus `json:"status"`
+}
+
+// StatTotals Sums of the match stats (see PlayerMatchStats) over the season.
+type StatTotals struct {
+	Assists             int `json:"assists"`
+	AssistsContribution int `json:"assists_contribution"`
+	AssistsSetPiece     int `json:"assists_set_piece"`
+	CleanSheets         int `json:"clean_sheets"`
+	DecisiveGoalsDraw   int `json:"decisive_goals_draw"`
+	DecisiveGoalsWin    int `json:"decisive_goals_win"`
+	Goals               int `json:"goals"`
+	GoalsConceded       int `json:"goals_conceded"`
+	OwnGoals            int `json:"own_goals"`
+	PenaltiesMissed     int `json:"penalties_missed"`
+	PenaltiesSaved      int `json:"penalties_saved"`
+	PenaltiesScored     int `json:"penalties_scored"`
+	PlayerOfTheMatch    int `json:"player_of_the_match"`
+
+	// SentOff Matches in which the player was sent off.
+	SentOff     int `json:"sent_off"`
+	YellowCards int `json:"yellow_cards"`
 }
 
 // VotoSource defines model for VotoSource.
@@ -302,8 +559,14 @@ type VotoSourceList struct {
 	Sources []VotoSource `json:"sources"`
 }
 
+// Cursor defines model for Cursor.
+type Cursor = string
+
 // FixtureId defines model for FixtureId.
 type FixtureId = openapi_types.UUID
+
+// Limit defines model for Limit.
+type Limit = int
 
 // PlayerId defines model for PlayerId.
 type PlayerId = openapi_types.UUID
@@ -314,20 +577,106 @@ type SeasonId = openapi_types.UUID
 // VotoSourceQuery defines model for VotoSourceQuery.
 type VotoSourceQuery = string
 
+// ListClubsParams defines parameters for ListClubs.
+type ListClubsParams struct {
+	// Limit Page size, 1 to 200. Without `limit` and `cursor` the whole list is returned.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListClubPlayersParams defines parameters for ListClubPlayers.
+type ListClubPlayersParams struct {
+	// Season A season id.
+	Season *openapi_types.UUID `form:"season,omitempty" json:"season,omitempty"`
+
+	// Limit Page size, 1 to 200. Without `limit` and `cursor` the whole list is returned.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // GetFixtureScoresParams defines parameters for GetFixtureScores.
 type GetFixtureScoresParams struct {
 	// VotoSource Where base voti come from.
 	VotoSource *VotoSourceQuery `form:"voto_source,omitempty" json:"voto_source,omitempty"`
+
+	// Limit Page size, 1 to 200. Without `limit` and `cursor` the whole list is returned.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListPlayersParams defines parameters for ListPlayers.
+type ListPlayersParams struct {
+	// Q Case-insensitive text in the name.
+	Q    *string     `form:"q,omitempty" json:"q,omitempty"`
+	Role *PlayerRole `form:"role,omitempty" json:"role,omitempty"`
+
+	// Club A club id.
+	Club *openapi_types.UUID `form:"club,omitempty" json:"club,omitempty"`
+
+	// Season A season id.
+	Season        *openapi_types.UUID       `form:"season,omitempty" json:"season,omitempty"`
+	BirthYearFrom *int                      `form:"birth_year_from,omitempty" json:"birth_year_from,omitempty"`
+	BirthYearTo   *int                      `form:"birth_year_to,omitempty" json:"birth_year_to,omitempty"`
+	Sort          *ListPlayersParamsSort    `form:"sort,omitempty" json:"sort,omitempty"`
+	Include       *ListPlayersParamsInclude `form:"include,omitempty" json:"include,omitempty"`
+
+	// VotoSource Where base voti come from.
+	VotoSource *VotoSourceQuery `form:"voto_source,omitempty" json:"voto_source,omitempty"`
+
+	// Limit Page size, 1 to 200; 50 when omitted.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListPlayersParamsSort defines parameters for ListPlayers.
+type ListPlayersParamsSort string
+
+// ListPlayersParamsInclude defines parameters for ListPlayers.
+type ListPlayersParamsInclude string
+
+// ListSeasonsParams defines parameters for ListSeasons.
+type ListSeasonsParams struct {
+	// Limit Page size, 1 to 200. Without `limit` and `cursor` the whole list is returned.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // GetMatchdayScoresParams defines parameters for GetMatchdayScores.
 type GetMatchdayScoresParams struct {
 	// VotoSource Where base voti come from.
 	VotoSource *VotoSourceQuery `form:"voto_source,omitempty" json:"voto_source,omitempty"`
+
+	// Limit Page size, 1 to 200. Without `limit` and `cursor` the whole list is returned.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // GetPlayerSeasonScoresParams defines parameters for GetPlayerSeasonScores.
 type GetPlayerSeasonScoresParams struct {
+	// VotoSource Where base voti come from.
+	VotoSource *VotoSourceQuery `form:"voto_source,omitempty" json:"voto_source,omitempty"`
+
+	// Limit Page size, 1 to 200. Without `limit` and `cursor` the whole list is returned.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The `next_cursor` of the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GetPlayerSeasonStatsParams defines parameters for GetPlayerSeasonStats.
+type GetPlayerSeasonStatsParams struct {
 	// VotoSource Where base voti come from.
 	VotoSource *VotoSourceQuery `form:"voto_source,omitempty" json:"voto_source,omitempty"`
 }
@@ -343,6 +692,12 @@ type ServerInterface interface {
 	// GetReady Readiness probe (checks the database)
 	// (GET /readyz)
 	GetReady(w http.ResponseWriter, r *http.Request)
+	// ListClubs List clubs
+	// (GET /v1/clubs)
+	ListClubs(w http.ResponseWriter, r *http.Request, params ListClubsParams)
+	// ListClubPlayers A club's squad in a season
+	// (GET /v1/clubs/{clubId}/players)
+	ListClubPlayers(w http.ResponseWriter, r *http.Request, clubId openapi_types.UUID, params ListClubPlayersParams)
 	// GetFixtureRuns Audit trail of every computation of a fixture
 	// (GET /v1/fixtures/{fixtureId}/runs)
 	GetFixtureRuns(w http.ResponseWriter, r *http.Request, fixtureId FixtureId)
@@ -352,12 +707,15 @@ type ServerInterface interface {
 	// PutMatchdayExceptions Override the real-match policy for fixtures of a matchday
 	// (PUT /v1/leagues/{leagueId}/matchdays/{number}/exceptions)
 	PutMatchdayExceptions(w http.ResponseWriter, r *http.Request, leagueId openapi_types.UUID, number int)
+	// ListPlayers Search and browse players
+	// (GET /v1/players)
+	ListPlayers(w http.ResponseWriter, r *http.Request, params ListPlayersParams)
 	// GetPlayer Get a player
 	// (GET /v1/players/{playerId})
 	GetPlayer(w http.ResponseWriter, r *http.Request, playerId PlayerId)
 	// ListSeasons List seasons
 	// (GET /v1/seasons)
-	ListSeasons(w http.ResponseWriter, r *http.Request)
+	ListSeasons(w http.ResponseWriter, r *http.Request, params ListSeasonsParams)
 	// ListMatchdays List a season's matchdays and fixtures
 	// (GET /v1/seasons/{seasonId}/matchdays)
 	ListMatchdays(w http.ResponseWriter, r *http.Request, seasonId SeasonId)
@@ -367,6 +725,9 @@ type ServerInterface interface {
 	// GetPlayerSeasonScores A player's voti and fantavoti across a season
 	// (GET /v1/seasons/{seasonId}/players/{playerId}/scores)
 	GetPlayerSeasonScores(w http.ResponseWriter, r *http.Request, seasonId SeasonId, playerId PlayerId, params GetPlayerSeasonScoresParams)
+	// GetPlayerSeasonStats A player's season statistics
+	// (GET /v1/seasons/{seasonId}/players/{playerId}/stats)
+	GetPlayerSeasonStats(w http.ResponseWriter, r *http.Request, seasonId SeasonId, playerId PlayerId, params GetPlayerSeasonStatsParams)
 	// GetDefaultSettings Get the default league settings document (Classic)
 	// (GET /v1/settings/default)
 	GetDefaultSettings(w http.ResponseWriter, r *http.Request)
@@ -403,6 +764,120 @@ func (siw *ServerInterfaceWrapper) GetReady(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetReady(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListClubs operation middleware
+func (siw *ServerInterfaceWrapper) ListClubs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListClubsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListClubs(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListClubPlayers operation middleware
+func (siw *ServerInterfaceWrapper) ListClubPlayers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "clubId" -------------
+	var clubId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "clubId", r.PathValue("clubId"), &clubId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "clubId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListClubPlayersParams
+
+	// ------------- Optional query parameter "season" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "season", r.URL.Query(), &params.Season, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "season"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "season", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListClubPlayers(w, r, clubId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -469,6 +944,32 @@ func (siw *ServerInterfaceWrapper) GetFixtureScores(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFixtureScores(w, r, fixtureId, params)
 	}))
@@ -515,6 +1016,169 @@ func (siw *ServerInterfaceWrapper) PutMatchdayExceptions(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// ListPlayers operation middleware
+func (siw *ServerInterfaceWrapper) ListPlayers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPlayersParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "role" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "role", r.URL.Query(), &params.Role, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "role"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "role", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "club" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "club", r.URL.Query(), &params.Club, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "club"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "club", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "season" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "season", r.URL.Query(), &params.Season, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "season"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "season", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "birth_year_from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "birth_year_from", r.URL.Query(), &params.BirthYearFrom, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "birth_year_from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "birth_year_from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "birth_year_to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "birth_year_to", r.URL.Query(), &params.BirthYearTo, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "birth_year_to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "birth_year_to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include", r.URL.Query(), &params.Include, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "voto_source" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "voto_source", r.URL.Query(), &params.VotoSource, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "voto_source"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "voto_source", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPlayers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetPlayer operation middleware
 func (siw *ServerInterfaceWrapper) GetPlayer(w http.ResponseWriter, r *http.Request) {
 
@@ -544,8 +1208,40 @@ func (siw *ServerInterfaceWrapper) GetPlayer(w http.ResponseWriter, r *http.Requ
 // ListSeasons operation middleware
 func (siw *ServerInterfaceWrapper) ListSeasons(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSeasonsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListSeasons(w, r)
+		siw.Handler.ListSeasons(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -621,6 +1317,32 @@ func (siw *ServerInterfaceWrapper) GetMatchdayScores(w http.ResponseWriter, r *h
 		return
 	}
 
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMatchdayScores(w, r, seasonId, number, params)
 	}))
@@ -672,8 +1394,85 @@ func (siw *ServerInterfaceWrapper) GetPlayerSeasonScores(w http.ResponseWriter, 
 		return
 	}
 
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetPlayerSeasonScores(w, r, seasonId, playerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPlayerSeasonStats operation middleware
+func (siw *ServerInterfaceWrapper) GetPlayerSeasonStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "seasonId" -------------
+	var seasonId SeasonId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "seasonId", r.PathValue("seasonId"), &seasonId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "seasonId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "playerId" -------------
+	var playerId PlayerId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "playerId", r.PathValue("playerId"), &playerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "playerId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPlayerSeasonStatsParams
+
+	// ------------- Optional query parameter "voto_source" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "voto_source", r.URL.Query(), &params.VotoSource, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "voto_source"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "voto_source", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlayerSeasonStats(w, r, seasonId, playerId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -840,9 +1639,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/seasons/{seasonId}/matchdays", wrapper.ListMatchdays)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/seasons/{seasonId}/matchdays/{number}/scores", wrapper.GetMatchdayScores)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/seasons/{seasonId}/players/{playerId}/scores", wrapper.GetPlayerSeasonScores)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/seasons/{seasonId}/players/{playerId}/stats", wrapper.GetPlayerSeasonStats)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/fixtures/{fixtureId}/scores", wrapper.GetFixtureScores)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/fixtures/{fixtureId}/runs", wrapper.GetFixtureRuns)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/players/{playerId}", wrapper.GetPlayer)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/players", wrapper.ListPlayers)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/clubs", wrapper.ListClubs)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/clubs/{clubId}/players", wrapper.ListClubPlayers)
 
 	return m
 }
@@ -903,6 +1706,109 @@ func (response GetReady503ApplicationProblemPlusJSONResponse) VisitGetReadyRespo
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClubsRequestObject struct {
+	Params ListClubsParams
+}
+
+type ListClubsResponseObject interface {
+	VisitListClubsResponse(w http.ResponseWriter) error
+}
+
+type ListClubs200JSONResponse struct {
+	Clubs []Ref `json:"clubs"`
+
+	// NextCursor Present when more rows follow; pass it as `cursor` to get them.
+	NextCursor *NextCursor `json:"next_cursor,omitempty"`
+}
+
+func (response ListClubs200JSONResponse) VisitListClubsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClubs400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListClubs400ApplicationProblemPlusJSONResponse) VisitListClubsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClubPlayersRequestObject struct {
+	ClubId openapi_types.UUID `json:"clubId"`
+	Params ListClubPlayersParams
+}
+
+type ListClubPlayersResponseObject interface {
+	VisitListClubPlayersResponse(w http.ResponseWriter) error
+}
+
+type ListClubPlayers200JSONResponse struct {
+	Club Ref `json:"club"`
+
+	// NextCursor Present when more rows follow; pass it as `cursor` to get them.
+	NextCursor *NextCursor   `json:"next_cursor,omitempty"`
+	Players    []SquadPlayer `json:"players"`
+	Season     *Season       `json:"season"`
+}
+
+func (response ListClubPlayers200JSONResponse) VisitListClubPlayersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClubPlayers400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListClubPlayers400ApplicationProblemPlusJSONResponse) VisitListClubPlayersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListClubPlayers404ApplicationProblemPlusJSONResponse Problem
+
+func (response ListClubPlayers404ApplicationProblemPlusJSONResponse) VisitListClubPlayersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1083,6 +1989,48 @@ func (response PutMatchdayExceptions501ApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type ListPlayersRequestObject struct {
+	Params ListPlayersParams
+}
+
+type ListPlayersResponseObject interface {
+	VisitListPlayersResponse(w http.ResponseWriter) error
+}
+
+type ListPlayers200JSONResponse struct {
+	// NextCursor Present when more rows follow; pass it as `cursor` to get them.
+	NextCursor *NextCursor     `json:"next_cursor,omitempty"`
+	Players    []PlayerSummary `json:"players"`
+}
+
+func (response ListPlayers200JSONResponse) VisitListPlayersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlayers400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListPlayers400ApplicationProblemPlusJSONResponse) VisitListPlayersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetPlayerRequestObject struct {
 	PlayerId PlayerId `json:"playerId"`
 }
@@ -1091,7 +2039,7 @@ type GetPlayerResponseObject interface {
 	VisitGetPlayerResponse(w http.ResponseWriter) error
 }
 
-type GetPlayer200JSONResponse Ref
+type GetPlayer200JSONResponse Player
 
 func (response GetPlayer200JSONResponse) VisitGetPlayerResponse(w http.ResponseWriter) error {
 
@@ -1136,6 +2084,7 @@ func (response GetPlayer404ApplicationProblemPlusJSONResponse) VisitGetPlayerRes
 }
 
 type ListSeasonsRequestObject struct {
+	Params ListSeasonsParams
 }
 
 type ListSeasonsResponseObject interface {
@@ -1143,7 +2092,9 @@ type ListSeasonsResponseObject interface {
 }
 
 type ListSeasons200JSONResponse struct {
-	Seasons []Season `json:"seasons"`
+	// NextCursor Present when more rows follow; pass it as `cursor` to get them.
+	NextCursor *NextCursor `json:"next_cursor,omitempty"`
+	Seasons    []Season    `json:"seasons"`
 }
 
 func (response ListSeasons200JSONResponse) VisitListSeasonsResponse(w http.ResponseWriter) error {
@@ -1154,6 +2105,22 @@ func (response ListSeasons200JSONResponse) VisitListSeasonsResponse(w http.Respo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSeasons400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListSeasons400ApplicationProblemPlusJSONResponse) VisitListSeasonsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1321,6 +2288,65 @@ func (response GetPlayerSeasonScores404ApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type GetPlayerSeasonStatsRequestObject struct {
+	SeasonId SeasonId `json:"seasonId"`
+	PlayerId PlayerId `json:"playerId"`
+	Params   GetPlayerSeasonStatsParams
+}
+
+type GetPlayerSeasonStatsResponseObject interface {
+	VisitGetPlayerSeasonStatsResponse(w http.ResponseWriter) error
+}
+
+type GetPlayerSeasonStats200JSONResponse struct {
+	Player         Ref         `json:"player"`
+	SettingsSha256 string      `json:"settings_sha256"`
+	Stats          SeasonStats `json:"stats"`
+	VotoSource     string      `json:"voto_source"`
+}
+
+func (response GetPlayerSeasonStats200JSONResponse) VisitGetPlayerSeasonStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlayerSeasonStats400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetPlayerSeasonStats400ApplicationProblemPlusJSONResponse) VisitGetPlayerSeasonStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlayerSeasonStats404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetPlayerSeasonStats404ApplicationProblemPlusJSONResponse) VisitGetPlayerSeasonStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetDefaultSettingsRequestObject struct {
 }
 
@@ -1371,6 +2397,12 @@ type StrictServerInterface interface {
 	// GetReady Readiness probe (checks the database)
 	// (GET /readyz)
 	GetReady(ctx context.Context, request GetReadyRequestObject) (GetReadyResponseObject, error)
+	// ListClubs List clubs
+	// (GET /v1/clubs)
+	ListClubs(ctx context.Context, request ListClubsRequestObject) (ListClubsResponseObject, error)
+	// ListClubPlayers A club's squad in a season
+	// (GET /v1/clubs/{clubId}/players)
+	ListClubPlayers(ctx context.Context, request ListClubPlayersRequestObject) (ListClubPlayersResponseObject, error)
 	// GetFixtureRuns Audit trail of every computation of a fixture
 	// (GET /v1/fixtures/{fixtureId}/runs)
 	GetFixtureRuns(ctx context.Context, request GetFixtureRunsRequestObject) (GetFixtureRunsResponseObject, error)
@@ -1380,6 +2412,9 @@ type StrictServerInterface interface {
 	// PutMatchdayExceptions Override the real-match policy for fixtures of a matchday
 	// (PUT /v1/leagues/{leagueId}/matchdays/{number}/exceptions)
 	PutMatchdayExceptions(ctx context.Context, request PutMatchdayExceptionsRequestObject) (PutMatchdayExceptionsResponseObject, error)
+	// ListPlayers Search and browse players
+	// (GET /v1/players)
+	ListPlayers(ctx context.Context, request ListPlayersRequestObject) (ListPlayersResponseObject, error)
 	// GetPlayer Get a player
 	// (GET /v1/players/{playerId})
 	GetPlayer(ctx context.Context, request GetPlayerRequestObject) (GetPlayerResponseObject, error)
@@ -1395,6 +2430,9 @@ type StrictServerInterface interface {
 	// GetPlayerSeasonScores A player's voti and fantavoti across a season
 	// (GET /v1/seasons/{seasonId}/players/{playerId}/scores)
 	GetPlayerSeasonScores(ctx context.Context, request GetPlayerSeasonScoresRequestObject) (GetPlayerSeasonScoresResponseObject, error)
+	// GetPlayerSeasonStats A player's season statistics
+	// (GET /v1/seasons/{seasonId}/players/{playerId}/stats)
+	GetPlayerSeasonStats(ctx context.Context, request GetPlayerSeasonStatsRequestObject) (GetPlayerSeasonStatsResponseObject, error)
 	// GetDefaultSettings Get the default league settings document (Classic)
 	// (GET /v1/settings/default)
 	GetDefaultSettings(ctx context.Context, request GetDefaultSettingsRequestObject) (GetDefaultSettingsResponseObject, error)
@@ -1490,6 +2528,59 @@ func (sh *strictHandler) GetReady(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ListClubs operation middleware
+func (sh *strictHandler) ListClubs(w http.ResponseWriter, r *http.Request, params ListClubsParams) {
+	var request ListClubsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListClubs(ctx, request.(ListClubsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListClubs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListClubsResponseObject); ok {
+		if err := validResponse.VisitListClubsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListClubPlayers operation middleware
+func (sh *strictHandler) ListClubPlayers(w http.ResponseWriter, r *http.Request, clubId openapi_types.UUID, params ListClubPlayersParams) {
+	var request ListClubPlayersRequestObject
+
+	request.ClubId = clubId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListClubPlayers(ctx, request.(ListClubPlayersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListClubPlayers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListClubPlayersResponseObject); ok {
+		if err := validResponse.VisitListClubPlayersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetFixtureRuns operation middleware
 func (sh *strictHandler) GetFixtureRuns(w http.ResponseWriter, r *http.Request, fixtureId FixtureId) {
 	var request GetFixtureRunsRequestObject
@@ -1577,6 +2668,32 @@ func (sh *strictHandler) PutMatchdayExceptions(w http.ResponseWriter, r *http.Re
 	}
 }
 
+// ListPlayers operation middleware
+func (sh *strictHandler) ListPlayers(w http.ResponseWriter, r *http.Request, params ListPlayersParams) {
+	var request ListPlayersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPlayers(ctx, request.(ListPlayersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPlayers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPlayersResponseObject); ok {
+		if err := validResponse.VisitListPlayersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetPlayer operation middleware
 func (sh *strictHandler) GetPlayer(w http.ResponseWriter, r *http.Request, playerId PlayerId) {
 	var request GetPlayerRequestObject
@@ -1604,8 +2721,10 @@ func (sh *strictHandler) GetPlayer(w http.ResponseWriter, r *http.Request, playe
 }
 
 // ListSeasons operation middleware
-func (sh *strictHandler) ListSeasons(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListSeasons(w http.ResponseWriter, r *http.Request, params ListSeasonsParams) {
 	var request ListSeasonsRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListSeasons(ctx, request.(ListSeasonsRequestObject))
@@ -1709,6 +2828,34 @@ func (sh *strictHandler) GetPlayerSeasonScores(w http.ResponseWriter, r *http.Re
 	}
 }
 
+// GetPlayerSeasonStats operation middleware
+func (sh *strictHandler) GetPlayerSeasonStats(w http.ResponseWriter, r *http.Request, seasonId SeasonId, playerId PlayerId, params GetPlayerSeasonStatsParams) {
+	var request GetPlayerSeasonStatsRequestObject
+
+	request.SeasonId = seasonId
+	request.PlayerId = playerId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlayerSeasonStats(ctx, request.(GetPlayerSeasonStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlayerSeasonStats")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlayerSeasonStatsResponseObject); ok {
+		if err := validResponse.VisitGetPlayerSeasonStatsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetDefaultSettings operation middleware
 func (sh *strictHandler) GetDefaultSettings(w http.ResponseWriter, r *http.Request) {
 	var request GetDefaultSettingsRequestObject
@@ -1762,73 +2909,112 @@ func (sh *strictHandler) ListVotoSources(w http.ResponseWriter, r *http.Request)
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"qfsuXCjv3t79XwAAAP//",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

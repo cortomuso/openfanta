@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/openfanta/openfanta/internal/domain"
@@ -58,6 +60,11 @@ func NewHandler(s *Server, log *slog.Logger) http.Handler {
 func notFound(format string, args ...any) Problem {
 	detail := fmt.Sprintf(format, args...)
 	return Problem{Type: "about:blank", Title: http.StatusText(http.StatusNotFound), Status: http.StatusNotFound, Detail: &detail}
+}
+
+func badRequest(err error) Problem {
+	detail := err.Error()
+	return Problem{Type: "about:blank", Title: http.StatusText(http.StatusBadRequest), Status: http.StatusBadRequest, Detail: &detail}
 }
 
 func writeProblem(w http.ResponseWriter, status int, detail string) {
@@ -119,6 +126,21 @@ func exception(e string) *FixtureException {
 	return &v
 }
 
+// setResult fills the real result of a fixture: the score only when the provider gave one,
+// the period only when its status maps to one.
+func setResult(f *Fixture, home, away *int16, period string) {
+	if home != nil && away != nil {
+		f.Score = &struct {
+			Away int `json:"away"`
+			Home int `json:"home"`
+		}{Away: int(*away), Home: int(*home)}
+	}
+	if period != "" {
+		p := FixturePeriod(period)
+		f.Period = &p
+	}
+}
+
 // ListVotoSources implements StrictServerInterface.
 func (s *Server) ListVotoSources(_ context.Context, _ ListVotoSourcesRequestObject) (ListVotoSourcesResponseObject, error) {
 	out := ListVotoSources200JSONResponse{Default: DefaultVotoSource}
@@ -129,16 +151,28 @@ func (s *Server) ListVotoSources(_ context.Context, _ ListVotoSourcesRequestObje
 }
 
 // ListSeasons implements StrictServerInterface.
-func (s *Server) ListSeasons(ctx context.Context, _ ListSeasonsRequestObject) (ListSeasonsResponseObject, error) {
+func (s *Server) ListSeasons(ctx context.Context, req ListSeasonsRequestObject) (ListSeasonsResponseObject, error) {
 	rows, err := s.q.ListSeasons(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := ListSeasons200JSONResponse{Seasons: make([]Season, 0, len(rows))}
-	for _, r := range rows {
+	page, next, err := paginate(rows, func(r db.ListSeasonsRow) string { return r.ID.String() }, req.Params.Limit, req.Params.Cursor)
+	if err != nil {
+		return ListSeasons400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(err))}, nil
+	}
+	out := ListSeasons200JSONResponse{Seasons: make([]Season, 0, len(page)), NextCursor: nextCursor(next)}
+	for _, r := range page {
 		out.Seasons = append(out.Seasons, season(db.GetSeasonRow(r)))
 	}
 	return out, nil
+}
+
+// nextCursor maps the "" of a last page to an absent field.
+func nextCursor(c string) *NextCursor {
+	if c == "" {
+		return nil
+	}
+	return &c
 }
 
 func season(r db.GetSeasonRow) Season {
@@ -167,10 +201,12 @@ func (s *Server) ListMatchdays(ctx context.Context, req ListMatchdaysRequestObje
 			out.Matchdays = append(out.Matchdays, Matchday{Number: n, Fixtures: []Fixture{}})
 		}
 		md := &out.Matchdays[len(out.Matchdays)-1]
-		md.Fixtures = append(md.Fixtures, Fixture{
+		fx := Fixture{
 			Id: r.ID.String(), Matchday: n, Kickoff: r.Kickoff, Status: r.Status, Exception: exception(r.Exception),
 			Home: Ref{Id: r.HomeID.String(), Name: r.HomeName}, Away: Ref{Id: r.AwayID.String(), Name: r.AwayName},
-		})
+		}
+		setResult(&fx, r.HomeScore, r.AwayScore, r.Period)
+		md.Fixtures = append(md.Fixtures, fx)
 	}
 	return out, nil
 }
@@ -189,7 +225,10 @@ func (s *Server) GetMatchdayScores(ctx context.Context, req GetMatchdayScoresReq
 	if err != nil {
 		return nil, err
 	}
-	list, err := scoreList(rs, vs, rows)
+	list, err := scoreList(rs, vs, rows, req.Params.Limit, req.Params.Cursor)
+	if bp := (badPageError{}); errors.As(err, &bp) {
+		return GetMatchdayScores400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(bp.error))}, nil
+	}
 	return GetMatchdayScores200JSONResponse(list), err
 }
 
@@ -210,7 +249,10 @@ func (s *Server) GetPlayerSeasonScores(ctx context.Context, req GetPlayerSeasonS
 	if err != nil {
 		return nil, err
 	}
-	list, err := scoreList(rs, vs, rows)
+	list, err := scoreList(rs, vs, rows, req.Params.Limit, req.Params.Cursor)
+	if bp := (badPageError{}); errors.As(err, &bp) {
+		return GetPlayerSeasonScores400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(bp.error))}, nil
+	}
 	return GetPlayerSeasonScores200JSONResponse(list), err
 }
 
@@ -226,7 +268,10 @@ func (s *Server) GetFixtureScores(ctx context.Context, req GetFixtureScoresReque
 	if err != nil {
 		return nil, err
 	}
-	list, err := scoreList(rs, vs, rows)
+	list, err := scoreList(rs, vs, rows, req.Params.Limit, req.Params.Cursor)
+	if bp := (badPageError{}); errors.As(err, &bp) {
+		return GetFixtureScores400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(bp.error))}, nil
+	}
 	return GetFixtureScores200JSONResponse(list), err
 }
 
@@ -250,6 +295,7 @@ func (s *Server) GetFixtureRuns(ctx context.Context, req GetFixtureRunsRequestOb
 		},
 		Runs: make([]Run, 0, len(rows)),
 	}
+	setResult(&out.Fixture, f.HomeScore, f.AwayScore, f.Period)
 	for _, r := range rows {
 		run := Run{
 			Id: r.ID.String(), SettingsSha256: r.SettingsSha256, VotoSource: r.VotoSource,
@@ -273,12 +319,300 @@ func (s *Server) GetPlayer(ctx context.Context, req GetPlayerRequestObject) (Get
 	if err != nil {
 		return nil, err
 	}
-	return GetPlayer200JSONResponse{Id: p.ID.String(), Name: p.Name}, nil
+	history, err := s.q.PlayerClubHistory(ctx, req.PlayerId)
+	if err != nil {
+		return nil, err
+	}
+	return GetPlayer200JSONResponse(player(p, history)), nil
 }
 
-func scoreList(rs, vs string, rows []db.CurrentScore) (ScoreList, error) {
-	out := ScoreList{SettingsSha256: rs, VotoSource: vs, Scores: make([]Score, 0, len(rows))}
+// squadStatus maps a squad entry's listed flag to the API status.
+func squadStatus(listed bool) PlayerStatus {
+	if listed {
+		return Listed
+	}
+	return NoLongerListed
+}
+
+func squadRoles(role *string) []PlayerRole {
+	if role == nil {
+		return []PlayerRole{}
+	}
+	return []PlayerRole{PlayerRole(*role)}
+}
+
+// player maps the stored profile to the API. Roles, club and status are those of the latest
+// season in history (latest first) and stay empty or unknown when no squad named the player:
+// nothing is guessed from match data.
+func player(p db.Player, history []db.PlayerClubHistoryRow) Player {
+	out := Player{Id: p.ID.String(), Name: p.Name, Roles: []PlayerRole{}, Status: Unknown, ClubHistory: make([]ClubSeason, 0, len(history))}
+	if p.BirthYear != nil {
+		y := int(*p.BirthYear)
+		out.BirthYear = &y
+	}
+	for _, h := range history {
+		cs := ClubSeason{Club: Ref{Id: h.ClubID.String(), Name: h.ClubName}, Roles: squadRoles(h.Role), Status: squadStatus(h.Listed)}
+		cs.Season.Id, cs.Season.Name = h.SeasonID.String(), h.SeasonName
+		out.ClubHistory = append(out.ClubHistory, cs)
+	}
+	if len(history) > 0 {
+		out.Club = &out.ClubHistory[0].Club
+		out.Roles = out.ClubHistory[0].Roles
+		out.Status = out.ClubHistory[0].Status
+	}
+	return out
+}
+
+// ListPlayers implements StrictServerInterface.
+func (s *Server) ListPlayers(ctx context.Context, req ListPlayersRequestObject) (ListPlayersResponseObject, error) {
+	bad := func(err error) (ListPlayersResponseObject, error) {
+		return ListPlayers400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(err))}, nil
+	}
+	pr := req.Params
+	limit := DefaultPageSize
+	if pr.Limit != nil {
+		limit = *pr.Limit
+	}
+	if limit < 1 || limit > MaxLimit {
+		return bad(fmt.Errorf("limit must be between 1 and %d", MaxLimit))
+	}
+	if pr.BirthYearFrom != nil && pr.BirthYearTo != nil && *pr.BirthYearFrom > *pr.BirthYearTo {
+		return bad(errors.New("birth_year_from is after birth_year_to"))
+	}
+	sortBy := "name"
+	if pr.Sort != nil {
+		sortBy = string(*pr.Sort)
+	}
+	if sortBy != "name" && sortBy != "avg_voto" && sortBy != "avg_fantavoto" {
+		return bad(fmt.Errorf("sort %q is not one of name, avg_voto, avg_fantavoto", sortBy))
+	}
+	if pr.Include != nil && *pr.Include != "stats" {
+		return bad(fmt.Errorf("include %q is not stats", *pr.Include))
+	}
+	arg := db.ListPlayersParams{
+		RowLimit: int32(limit) + 1, Sort: sortBy,
+		SettingsSha256: settings.Classic().SHA256, VotoSource: or(pr.VotoSource, DefaultVotoSource),
+	}
+	if pr.Q != nil && *pr.Q != "" {
+		p := likePattern(*pr.Q)
+		arg.NamePattern = &p
+	}
+	if pr.Role != nil {
+		if !domain.CatalogRole(*pr.Role).Valid() {
+			return bad(fmt.Errorf("role %q is not one of P, D, C, A", *pr.Role))
+		}
+		r := string(*pr.Role)
+		arg.Role = &r
+	}
+	arg.ClubID, arg.SeasonID = pr.Club, pr.Season
+	if pr.BirthYearFrom != nil {
+		v := int32(*pr.BirthYearFrom)
+		arg.BirthFrom = &v
+	}
+	if pr.BirthYearTo != nil {
+		v := int32(*pr.BirthYearTo)
+		arg.BirthTo = &v
+	}
+	if pr.Cursor != nil && *pr.Cursor != "" {
+		sortText, name, idText, err := decodeKeyset(*pr.Cursor)
+		id, perr := uuid.Parse(idText)
+		if err != nil || perr != nil {
+			return bad(errBadCursor)
+		}
+		arg.AfterName, arg.AfterID = &name, &id
+		if sortText != "" {
+			v, err := strconv.ParseInt(sortText, 10, 32)
+			if err != nil {
+				return bad(errBadCursor)
+			}
+			v32 := int32(v)
+			arg.AfterSort = &v32
+		}
+	}
+	rows, err := s.q.ListPlayers(ctx, arg)
+	if err != nil {
+		return nil, err
+	}
+	out := ListPlayers200JSONResponse{Players: make([]PlayerSummary, 0, len(rows))}
+	if len(rows) > limit {
+		rows = rows[:limit]
+		last := rows[limit-1]
+		var sortValue *int32
+		switch sortBy {
+		case "avg_voto":
+			sortValue = last.AvgVoto
+		case "avg_fantavoto":
+			sortValue = last.AvgFantavoto
+		}
+		sv := ""
+		if sortValue != nil {
+			sv = strconv.Itoa(int(*sortValue))
+		}
+		c := encodeKeyset(sv, last.Name, last.ID.String())
+		out.NextCursor = &c
+	}
 	for _, r := range rows {
+		ps := PlayerSummary{Id: r.ID.String(), Name: r.Name, Roles: squadRoles(r.Role), Status: Unknown}
+		if r.BirthYear != nil {
+			y := int(*r.BirthYear)
+			ps.BirthYear = &y
+		}
+		if r.ClubID != nil {
+			ps.Club = &Ref{Id: r.ClubID.String(), Name: *r.ClubName}
+		}
+		if r.Listed != nil {
+			ps.Status = squadStatus(*r.Listed)
+		}
+		if pr.Include != nil && r.SeasonID != nil {
+			st := seasonStats(*r.SeasonID, listStats(r))
+			ps.Stats = &st
+		}
+		out.Players = append(out.Players, ps)
+	}
+	return out, nil
+}
+
+// listStats reads the season aggregates of a list row; a player with no scores has none, which
+// shows as zeros and null averages.
+func listStats(r db.ListPlayersRow) db.PlayerSeasonStat {
+	n := func(v *int32) int32 {
+		if v == nil {
+			return 0
+		}
+		return *v
+	}
+	return db.PlayerSeasonStat{
+		Appearances: n(r.Appearances), Minutes: n(r.Minutes), GamesWithVoto: n(r.GamesWithVoto),
+		AvgVoto: r.AvgVoto, AvgFantavoto: r.AvgFantavoto,
+		Goals: n(r.Goals), PenaltiesScored: n(r.PenaltiesScored), PenaltiesMissed: n(r.PenaltiesMissed),
+		PenaltiesSaved: n(r.PenaltiesSaved), OwnGoals: n(r.OwnGoals), Assists: n(r.Assists),
+		AssistsSetPiece: n(r.AssistsSetPiece), AssistsContribution: n(r.AssistsContribution),
+		YellowCards: n(r.YellowCards), SentOff: n(r.SentOff), GoalsConceded: n(r.GoalsConceded),
+		CleanSheets: n(r.CleanSheets), DecisiveGoalsWin: n(r.DecisiveGoalsWin),
+		DecisiveGoalsDraw: n(r.DecisiveGoalsDraw), PlayerOfTheMatch: n(r.PlayerOfTheMatch),
+	}
+}
+
+func seasonStats(seasonID uuid.UUID, r db.PlayerSeasonStat) SeasonStats {
+	out := SeasonStats{
+		Appearances: int(r.Appearances), Minutes: int(r.Minutes), GamesWithVoto: int(r.GamesWithVoto),
+		AvgVoto: decimal(r.AvgVoto), AvgFantavoto: decimal(r.AvgFantavoto),
+		Totals: StatTotals{
+			Goals: int(r.Goals), PenaltiesScored: int(r.PenaltiesScored), PenaltiesMissed: int(r.PenaltiesMissed),
+			PenaltiesSaved: int(r.PenaltiesSaved), OwnGoals: int(r.OwnGoals), Assists: int(r.Assists),
+			AssistsSetPiece: int(r.AssistsSetPiece), AssistsContribution: int(r.AssistsContribution),
+			YellowCards: int(r.YellowCards), SentOff: int(r.SentOff), GoalsConceded: int(r.GoalsConceded),
+			CleanSheets: int(r.CleanSheets), DecisiveGoalsWin: int(r.DecisiveGoalsWin),
+			DecisiveGoalsDraw: int(r.DecisiveGoalsDraw), PlayerOfTheMatch: int(r.PlayerOfTheMatch),
+		},
+	}
+	out.Season.Id = seasonID.String()
+	return out
+}
+
+// GetPlayerSeasonStats implements StrictServerInterface.
+func (s *Server) GetPlayerSeasonStats(ctx context.Context, req GetPlayerSeasonStatsRequestObject) (GetPlayerSeasonStatsResponseObject, error) {
+	rs, vs := settings.Classic().SHA256, or(req.Params.VotoSource, DefaultVotoSource)
+	if _, err := s.q.GetSeason(ctx, req.SeasonId); errors.Is(err, pgx.ErrNoRows) {
+		return GetPlayerSeasonStats404ApplicationProblemPlusJSONResponse(notFound("season %s not found", req.SeasonId)), nil
+	} else if err != nil {
+		return nil, err
+	}
+	p, err := s.q.GetPlayer(ctx, req.PlayerId)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return GetPlayerSeasonStats404ApplicationProblemPlusJSONResponse(notFound("player %s not found", req.PlayerId)), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.q.GetPlayerSeasonStats(ctx, db.GetPlayerSeasonStatsParams{PlayerID: req.PlayerId, SeasonID: req.SeasonId, SettingsSha256: rs, VotoSource: vs})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	return GetPlayerSeasonStats200JSONResponse{
+		Player: Ref{Id: p.ID.String(), Name: p.Name}, SettingsSha256: rs, VotoSource: vs,
+		Stats: seasonStats(req.SeasonId, row), // no row: zeros and null averages
+	}, nil
+}
+
+// ListClubs implements StrictServerInterface.
+func (s *Server) ListClubs(ctx context.Context, req ListClubsRequestObject) (ListClubsResponseObject, error) {
+	rows, err := s.q.ListClubs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	page, next, err := paginate(rows, func(r db.Team) string { return r.ID.String() }, req.Params.Limit, req.Params.Cursor)
+	if err != nil {
+		return ListClubs400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(err))}, nil
+	}
+	out := ListClubs200JSONResponse{Clubs: make([]Ref, 0, len(page)), NextCursor: nextCursor(next)}
+	for _, r := range page {
+		out.Clubs = append(out.Clubs, Ref{Id: r.ID.String(), Name: r.Name})
+	}
+	return out, nil
+}
+
+// ListClubPlayers implements StrictServerInterface.
+func (s *Server) ListClubPlayers(ctx context.Context, req ListClubPlayersRequestObject) (ListClubPlayersResponseObject, error) {
+	club, err := s.q.GetClub(ctx, req.ClubId)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ListClubPlayers404ApplicationProblemPlusJSONResponse(notFound("club %s not found", req.ClubId)), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var se db.GetSeasonRow
+	if req.Params.Season != nil {
+		se, err = s.q.GetSeason(ctx, *req.Params.Season)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ListClubPlayers404ApplicationProblemPlusJSONResponse(notFound("season %s not found", *req.Params.Season)), nil
+		}
+	} else {
+		var latest db.ClubLatestSeasonRow
+		latest, err = s.q.ClubLatestSeason(ctx, req.ClubId)
+		se = db.GetSeasonRow(latest)
+	}
+	out := ListClubPlayers200JSONResponse{Club: Ref{Id: club.ID.String(), Name: club.Name}, Players: []SquadPlayer{}}
+	switch {
+	case errors.Is(err, pgx.ErrNoRows): // a club without a squad has no season to show
+		return out, nil
+	case err != nil:
+		return nil, err
+	}
+	sv := season(se)
+	out.Season = &sv
+	rows, err := s.q.ClubSquad(ctx, db.ClubSquadParams{TeamID: req.ClubId, SeasonID: se.ID})
+	if err != nil {
+		return nil, err
+	}
+	page, next, err := paginate(rows, func(r db.ClubSquadRow) string { return r.PlayerID.String() }, req.Params.Limit, req.Params.Cursor)
+	if err != nil {
+		return ListClubPlayers400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(err))}, nil
+	}
+	out.NextCursor = nextCursor(next)
+	for _, r := range page {
+		sp := SquadPlayer{Player: Ref{Id: r.PlayerID.String(), Name: r.PlayerName}, Roles: squadRoles(r.Role), Status: squadStatus(r.Listed)}
+		if r.BirthYear != nil {
+			y := int(*r.BirthYear)
+			sp.BirthYear = &y
+		}
+		out.Players = append(out.Players, sp)
+	}
+	return out, nil
+}
+
+// badPageError carries a limit or cursor error so handlers answer 400 instead of 500.
+type badPageError struct{ error }
+
+func (e badPageError) Unwrap() error { return e.error }
+
+func scoreList(rs, vs string, rows []db.CurrentScore, limit *int, cursor *string) (ScoreList, error) {
+	page, next, err := paginate(rows, func(r db.CurrentScore) string { return r.FixtureID.String() + "/" + r.PlayerID.String() }, limit, cursor)
+	if err != nil {
+		return ScoreList{}, badPageError{err}
+	}
+	out := ScoreList{SettingsSha256: rs, VotoSource: vs, Scores: make([]Score, 0, len(page)), NextCursor: nextCursor(next)}
+	for _, r := range page {
 		sc, err := score(r)
 		if err != nil {
 			return ScoreList{}, err

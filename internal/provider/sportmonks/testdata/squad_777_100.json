@@ -1,0 +1,124 @@
+{
+  "data": [
+    {
+      "id": 10010,
+      "player_id": 1001,
+      "team_id": 100,
+      "position_id": 24,
+      "detailed_position_id": null,
+      "jersey_number": 1,
+      "player": {
+        "id": 1001,
+        "sport_id": 1,
+        "country_id": 251,
+        "position_id": 24,
+        "name": "Home Keeper",
+        "common_name": "Home Keeper",
+        "display_name": "Home Keeper",
+        "date_of_birth": "1998-03-04"
+      },
+      "season_id": 777,
+      "has_values": true
+    },
+    {
+      "id": 10020,
+      "player_id": 1002,
+      "team_id": 100,
+      "position_id": 27,
+      "detailed_position_id": null,
+      "jersey_number": 2,
+      "player": {
+        "id": 1002,
+        "sport_id": 1,
+        "country_id": 251,
+        "position_id": 27,
+        "name": "Home Striker",
+        "common_name": "Home Striker",
+        "display_name": "Home Striker",
+        "date_of_birth": "2001-11-20"
+      },
+      "season_id": 777,
+      "has_values": true
+    },
+    {
+      "id": 10030,
+      "player_id": 1003,
+      "team_id": 100,
+      "position_id": 26,
+      "detailed_position_id": null,
+      "jersey_number": 3,
+      "player": {
+        "id": 1003,
+        "sport_id": 1,
+        "country_id": 251,
+        "position_id": 26,
+        "name": "Home Winger",
+        "common_name": "Home Winger",
+        "display_name": "Home Winger",
+        "date_of_birth": "1996-07-15"
+      },
+      "season_id": 777,
+      "has_values": true
+    },
+    {
+      "id": 10040,
+      "player_id": 1004,
+      "team_id": 100,
+      "position_id": null,
+      "detailed_position_id": null,
+      "jersey_number": 4,
+      "player": {
+        "id": 1004,
+        "sport_id": 1,
+        "country_id": 251,
+        "position_id": null,
+        "name": "Home Midfielder",
+        "common_name": "Home Midfielder",
+        "display_name": "Home Midfielder",
+        "date_of_birth": null
+      },
+      "season_id": 777,
+      "has_values": true
+    },
+    {
+      "id": 10050,
+      "player_id": 1005,
+      "team_id": 100,
+      "position_id": 25,
+      "detailed_position_id": null,
+      "jersey_number": 5,
+      "player": {
+        "id": 1005,
+        "sport_id": 1,
+        "country_id": 251,
+        "position_id": 25,
+        "name": "Home Defender",
+        "common_name": "Home Defender",
+        "display_name": "Home Defender",
+        "date_of_birth": "2003-01-09"
+      },
+      "season_id": 777,
+      "has_values": true
+    },
+    {
+      "id": 10990,
+      "player_id": 1099,
+      "team_id": 100,
+      "position_id": 25,
+      "detailed_position_id": null,
+      "jersey_number": 99,
+      "player": {
+        "id": 1099,
+        "sport_id": 1,
+        "country_id": 251,
+        "position_id": 25,
+        "name": "Home Departed",
+        "common_name": "Home Departed",
+        "display_name": "Home Departed",
+        "date_of_birth": "1994-05-30"
+      },
+      "season_id": 777,
+      "has_values": true
+    }
+  ]
+}

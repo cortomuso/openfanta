@@ -1,0 +1,64 @@
+{
+  "data": [
+    {
+      "id": 100000,
+      "transfer_id": null,
+      "player_id": 1001,
+      "team_id": 100,
+      "position_id": 24,
+      "detailed_position_id": null,
+      "start": "2025-07-01",
+      "end": "2028-06-30",
+      "captain": false,
+      "jersey_number": 1
+    },
+    {
+      "id": 100001,
+      "transfer_id": null,
+      "player_id": 1002,
+      "team_id": 100,
+      "position_id": 27,
+      "detailed_position_id": null,
+      "start": "2025-07-01",
+      "end": null,
+      "captain": false,
+      "jersey_number": 2
+    },
+    {
+      "id": 100002,
+      "transfer_id": null,
+      "player_id": 1003,
+      "team_id": 100,
+      "position_id": 26,
+      "detailed_position_id": null,
+      "start": "2025-07-01",
+      "end": "2027-06-30",
+      "captain": false,
+      "jersey_number": 3
+    },
+    {
+      "id": 100003,
+      "transfer_id": null,
+      "player_id": 1004,
+      "team_id": 100,
+      "position_id": 26,
+      "detailed_position_id": null,
+      "start": "2025-07-01",
+      "end": "2027-06-30",
+      "captain": false,
+      "jersey_number": 4
+    },
+    {
+      "id": 100004,
+      "transfer_id": null,
+      "player_id": 1005,
+      "team_id": 100,
+      "position_id": 25,
+      "detailed_position_id": null,
+      "start": "2025-07-01",
+      "end": "2027-06-30",
+      "captain": false,
+      "jersey_number": 5
+    }
+  ]
+}

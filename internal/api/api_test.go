@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +51,9 @@ func setup(t *testing.T) *fixture {
 	sm.BaseURL = srv.URL
 	svc := &ingest.Service{Store: st, Provider: sm, Sources: []voto.Source{voto.NewProviderRating()}, Logger: quiet, Now: time.Now}
 	if _, err := svc.IngestMatchday(ctx, "777", 1, ingest.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.IngestSquads(ctx, "777", ingest.Options{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -328,4 +333,453 @@ func TestStoreErrorsBecome500(t *testing.T) {
 		t.Errorf("closed store: %d %v %s", rec.Code, rec.Header(), rec.Body)
 	}
 	_ = store.ErrNotFound
+}
+
+// walkScores follows next_cursor through a score list and returns the player ids in order.
+func (f *fixture) walkScores(path string, limit int) []string {
+	f.t.Helper()
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	var ids []string
+	cursor := ""
+	for i := 0; i < 100; i++ {
+		url := path + sep + "limit=" + strconv.Itoa(limit)
+		if cursor != "" {
+			url += "&cursor=" + cursor
+		}
+		var page api.ScoreList
+		f.get(url, 200, &page)
+		if len(page.Scores) > limit {
+			f.t.Fatalf("%s: %d rows for limit %d", url, len(page.Scores), limit)
+		}
+		for _, s := range page.Scores {
+			ids = append(ids, s.FixtureId+"/"+s.Player.Id)
+		}
+		if page.NextCursor == nil {
+			return ids
+		}
+		cursor = *page.NextCursor
+	}
+	f.t.Fatalf("%s: paging does not end", path)
+	return nil
+}
+
+func TestScoreListPagination(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	var mds struct{ Matchdays []api.Matchday }
+	f.get("/v1/seasons/"+seasons.Seasons[0].Id+"/matchdays", 200, &mds)
+	path := "/v1/seasons/" + seasons.Seasons[0].Id + "/matchdays/1/scores"
+
+	var all api.ScoreList
+	f.get(path, 200, &all)
+	if all.NextCursor != nil || len(all.Scores) < 3 {
+		t.Fatalf("unpaged list: next=%v rows=%d", all.NextCursor, len(all.Scores))
+	}
+	want := make([]string, len(all.Scores))
+	for i, s := range all.Scores {
+		want[i] = s.FixtureId + "/" + s.Player.Id
+	}
+	// Page sizes below, at and above the list length, including an exact divisor.
+	for _, limit := range []int{1, 2, len(want), len(want) + 1} {
+		got := f.walkScores(path, limit)
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("limit %d: pages differ from the whole list:\n got %v\nwant %v", limit, got, want)
+		}
+	}
+}
+
+func TestPaginationErrors(t *testing.T) {
+	f := setup(t)
+	for _, q := range []string{"limit=0", "limit=201", "limit=x", "cursor=garbage", "cursor=v1.bm9wZQ"} {
+		var p api.Problem
+		rec := f.get("/v1/seasons?"+q, 400, &p)
+		if rec.Header().Get("Content-Type") != "application/problem+json" || p.Status != 400 {
+			t.Errorf("%s: %s %+v", q, rec.Header().Get("Content-Type"), p)
+		}
+	}
+}
+
+func TestSeasonsPagination(t *testing.T) {
+	f := setup(t)
+	var page struct {
+		Seasons    []api.Season
+		NextCursor *string `json:"next_cursor"`
+	}
+	f.get("/v1/seasons?limit=1", 200, &page)
+	if len(page.Seasons) != 1 {
+		t.Fatalf("limit=1 returned %d seasons", len(page.Seasons))
+	}
+}
+
+func TestPlayerProfile(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	var list api.ScoreList
+	f.get("/v1/seasons/"+seasons.Seasons[0].Id+"/matchdays/1/scores", 200, &list)
+	byName := map[string]string{}
+	for _, s := range list.Scores {
+		byName[s.Player.Name] = s.Player.Id
+	}
+	get := func(name string) api.Player {
+		t.Helper()
+		var p api.Player
+		f.get("/v1/players/"+byName[name], 200, &p)
+		return p
+	}
+
+	k := get("Home Keeper")
+	if k.Club == nil || k.Club.Name != "Home FC" || len(k.Roles) != 1 || k.Roles[0] != api.P ||
+		k.BirthYear == nil || *k.BirthYear != 1998 || k.Status != api.Listed {
+		t.Errorf("Home Keeper = %+v", k)
+	}
+	// Named by the squad with no position or birth date: nothing is invented.
+	if m := get("Home Midfielder"); len(m.Roles) != 0 || m.BirthYear != nil || m.Status != api.Listed || m.Club == nil {
+		t.Errorf("Home Midfielder = %+v", m)
+	}
+	// Played, but no squad names the player.
+	if u := get("Away Defender"); u.Club != nil || u.Status != api.Unknown || u.Roles == nil || len(u.Roles) != 0 {
+		t.Errorf("Away Defender = %+v", u)
+	}
+}
+
+func TestClubsAndSquads(t *testing.T) {
+	f := setup(t)
+
+	var clubs struct {
+		Clubs      []api.Ref
+		NextCursor *string `json:"next_cursor"`
+	}
+	f.get("/v1/clubs", 200, &clubs)
+	if len(clubs.Clubs) != 2 || clubs.Clubs[0].Name != "Away FC" || clubs.Clubs[1].Name != "Home FC" {
+		t.Fatalf("clubs = %+v", clubs)
+	}
+	f.get("/v1/clubs?limit=1", 200, &clubs)
+	if len(clubs.Clubs) != 1 || clubs.NextCursor == nil {
+		t.Fatalf("first page = %+v", clubs)
+	}
+	var second struct{ Clubs []api.Ref }
+	f.get("/v1/clubs?limit=1&cursor="+*clubs.NextCursor, 200, &second)
+	if len(second.Clubs) != 1 || second.Clubs[0].Name != "Home FC" {
+		t.Fatalf("second page = %+v", second)
+	}
+
+	home := second.Clubs[0].Id
+	var squad struct {
+		Club    api.Ref
+		Season  *api.Season
+		Players []api.SquadPlayer
+	}
+	f.get("/v1/clubs/"+home+"/players", 200, &squad)
+	if squad.Season == nil || squad.Season.Name != "2026/2027" || len(squad.Players) != 6 {
+		t.Fatalf("squad = %+v", squad)
+	}
+	by := map[string]api.SquadPlayer{}
+	for _, p := range squad.Players {
+		by[p.Player.Name] = p
+	}
+	if d := by["Home Departed"]; d.Status != api.NoLongerListed || len(d.Roles) != 1 || d.Roles[0] != api.D {
+		t.Errorf("Home Departed = %+v: a player who left must be flagged, not dropped", d)
+	}
+	if k := by["Home Keeper"]; k.Status != api.Listed || k.BirthYear == nil || *k.BirthYear != 1998 {
+		t.Errorf("Home Keeper = %+v", k)
+	}
+	f.get("/v1/clubs/"+home+"/players?season="+squad.Season.Id+"&limit=4", 200, &squad)
+	if len(squad.Players) != 4 {
+		t.Errorf("limit=4 returned %d players", len(squad.Players))
+	}
+
+	f.get("/v1/clubs/"+home+"/players?season=0190a0a0-0000-7000-8000-000000000009", 404, nil)
+
+	f.get("/v1/clubs/0190a0a0-0000-7000-8000-000000000009/players", 404, nil)
+	f.get("/v1/clubs/not-a-uuid/players", 400, nil)
+	f.get("/v1/clubs/"+home+"/players?cursor=garbage", 400, nil)
+}
+
+func TestPlayerClubHistory(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	var list api.ScoreList
+	f.get("/v1/seasons/"+seasons.Seasons[0].Id+"/matchdays/1/scores", 200, &list)
+	var id string
+	for _, s := range list.Scores {
+		if s.Player.Name == "Home Striker" {
+			id = s.Player.Id
+		}
+	}
+	var p api.Player
+	f.get("/v1/players/"+id, 200, &p)
+	if len(p.ClubHistory) != 1 || p.ClubHistory[0].Season.Name != "2026/2027" || p.ClubHistory[0].Club.Name != "Home FC" ||
+		p.ClubHistory[0].Roles[0] != api.A || p.Club == nil || p.Club.Id != p.ClubHistory[0].Club.Id {
+		t.Errorf("history = %+v", p.ClubHistory)
+	}
+}
+
+type playerPage struct {
+	Players    []api.PlayerSummary
+	NextCursor *string `json:"next_cursor"`
+}
+
+func (f *fixture) players(query string) []string {
+	f.t.Helper()
+	var page playerPage
+	f.get("/v1/players?"+query, 200, &page)
+	names := make([]string, len(page.Players))
+	for i, p := range page.Players {
+		names[i] = p.Name
+	}
+	return names
+}
+
+func TestPlayersListFiltersAndOrder(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	season := seasons.Seasons[0].Id
+	var clubs struct{ Clubs []api.Ref }
+	f.get("/v1/clubs", 200, &clubs)
+	home := clubs.Clubs[1].Id
+
+	all := f.players("")
+	if len(all) != 15 || !sort.StringsAreSorted(all) {
+		t.Fatalf("all players (%d), want 15 sorted by name: %v", len(all), all)
+	}
+	eq := func(what string, got []string, want ...string) {
+		t.Helper()
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("%s = %v, want %v", what, got, want)
+		}
+	}
+	eq("q=striker", f.players("q=striker"), "Away Striker", "Home Striker")
+	eq("q=HOME KEEP", f.players("q=HOME%20KEEP"), "Home Keeper")
+	eq("q=% is literal", f.players("q=%25"))
+	eq("role=P", f.players("role=P"), "Away Keeper", "Home Keeper")
+	eq("club+role", f.players("club="+home+"&role=D"), "Home Defender", "Home Departed")
+	eq("born from 2000", f.players("birth_year_from=2000"), "Away Striker", "Home Defender", "Home Striker")
+	eq("born to 1996", f.players("birth_year_to=1996"), "Away Keeper", "Home Departed", "Home Winger")
+	eq("born 1998..2000", f.players("birth_year_from=1998&birth_year_to=2000"), "Away Striker", "Home Keeper")
+	if n := len(f.players("season=" + season)); n != 8 {
+		t.Errorf("season filter keeps %d players, want the 8 in squads", n)
+	}
+	if n := len(f.players("season=0190a0a0-0000-7000-8000-000000000009")); n != 0 {
+		t.Errorf("unknown season keeps %d players", n)
+	}
+
+	// Home Super Sub played but no squad lists them, so a role filter cannot match them.
+	eq("Home attackers", f.players("q=Home&role=A"), "Home Striker")
+
+	for _, p := range f.playersFull("q=Home%20Departed") {
+		if p.Status != api.NoLongerListed || p.Club == nil || p.Club.Name != "Home FC" {
+			t.Errorf("Home Departed = %+v", p)
+		}
+	}
+	for _, p := range f.playersFull("q=Away%20Defender") {
+		if p.Status != api.Unknown || p.Club != nil || len(p.Roles) != 0 {
+			t.Errorf("a player no squad named = %+v", p)
+		}
+	}
+}
+
+func (f *fixture) playersFull(query string) []api.PlayerSummary {
+	f.t.Helper()
+	var page playerPage
+	f.get("/v1/players?"+query, 200, &page)
+	return page.Players
+}
+
+func TestPlayersListPagesInSQL(t *testing.T) {
+	f := setup(t)
+	want := f.players("")
+	for _, limit := range []int{1, 4, 5, 15, 16} {
+		var got []string
+		cursor := ""
+		for i := 0; ; i++ {
+			if i > 20 {
+				t.Fatalf("limit %d: paging does not end", limit)
+			}
+			q := "limit=" + strconv.Itoa(limit)
+			if cursor != "" {
+				q += "&cursor=" + cursor
+			}
+			var page playerPage
+			f.get("/v1/players?"+q, 200, &page)
+			if len(page.Players) > limit {
+				t.Fatalf("limit %d: page of %d", limit, len(page.Players))
+			}
+			for _, p := range page.Players {
+				got = append(got, p.Name)
+			}
+			if page.NextCursor == nil {
+				break
+			}
+			cursor = *page.NextCursor
+		}
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("limit %d walks %v, want %v", limit, got, want)
+		}
+	}
+	// 15 players, limit 5: an exact multiple ends without an empty last page.
+	var page playerPage
+	f.get("/v1/players?limit=15", 200, &page)
+	if page.NextCursor != nil || len(page.Players) != 15 {
+		t.Errorf("limit=15: %d players, next=%v", len(page.Players), page.NextCursor)
+	}
+}
+
+func TestPlayersListErrors(t *testing.T) {
+	f := setup(t)
+	for _, q := range []string{
+		"limit=0", "limit=201", "cursor=garbage", "cursor=v1.bm9wZQ", "role=X",
+		"birth_year_from=2001&birth_year_to=2000", "club=nope", "season=nope", "birth_year_from=abc",
+	} {
+		var p api.Problem
+		rec := f.get("/v1/players?"+q, 400, &p)
+		if rec.Header().Get("Content-Type") != "application/problem+json" || p.Status != 400 {
+			t.Errorf("%s: %s %+v", q, rec.Header().Get("Content-Type"), p)
+		}
+	}
+}
+
+func TestPlayerSeasonStats(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	season := seasons.Seasons[0].Id
+	var list api.ScoreList
+	f.get("/v1/seasons/"+season+"/matchdays/1/scores", 200, &list)
+
+	type stats struct {
+		Player api.Ref
+		Stats  api.SeasonStats
+	}
+	for _, sc := range list.Scores {
+		var got stats
+		f.get("/v1/seasons/"+season+"/players/"+sc.Player.Id+"/stats", 200, &got)
+		st := got.Stats
+		// One matchday ingested: the aggregates are that one score.
+		if st.GamesWithVoto != map[bool]int{true: 0, false: 1}[sc.Voto == nil] ||
+			(sc.Voto == nil) != (st.AvgVoto == nil) || (sc.Voto != nil && *st.AvgVoto != *sc.Voto) ||
+			(sc.Fantavoto != nil && (st.AvgFantavoto == nil || *st.AvgFantavoto != *sc.Fantavoto)) {
+			t.Errorf("%s: stats %+v vs score voto=%v fantavoto=%v", sc.Player.Name, st, sc.Voto, sc.Fantavoto)
+		}
+		if st.Totals.Goals != sc.Stats.Goals || st.Totals.Assists != sc.Stats.Assists || st.Minutes != sc.Minutes ||
+			st.Totals.YellowCards != sc.Stats.YellowCards || st.Totals.GoalsConceded != sc.Stats.GoalsConceded {
+			t.Errorf("%s: totals %+v vs stats %+v", sc.Player.Name, st.Totals, sc.Stats)
+		}
+		if st.Season.Id != season || got.Player.Id != sc.Player.Id {
+			t.Errorf("%s: ids %+v", sc.Player.Name, got)
+		}
+	}
+
+	// A player of the squad with no scores has zeros and no averages, not an error.
+	var none stats
+	departed := f.playersFull("q=Home%20Departed")[0]
+	f.get("/v1/seasons/"+season+"/players/"+departed.Id+"/stats", 200, &none)
+	if none.Stats.Appearances != 0 || none.Stats.AvgVoto != nil || none.Stats.AvgFantavoto != nil || none.Stats.Totals.Goals != 0 {
+		t.Errorf("player without scores = %+v", none)
+	}
+
+	f.get("/v1/seasons/0190a0a0-0000-7000-8000-000000000009/players/"+departed.Id+"/stats", 404, nil)
+	f.get("/v1/seasons/"+season+"/players/0190a0a0-0000-7000-8000-000000000009/stats", 404, nil)
+	f.get("/v1/seasons/"+season+"/players/nope/stats", 400, nil)
+
+	// The ETag middleware answers a repeat request with 304.
+	path := "/v1/seasons/" + season + "/players/" + departed.Id + "/stats"
+	rec := f.get(path, 200, nil)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("If-None-Match", rec.Header().Get("ETag"))
+	again := httptest.NewRecorder()
+	f.h.ServeHTTP(again, req)
+	if rec.Header().Get("ETag") == "" || again.Code != http.StatusNotModified {
+		t.Errorf("ETag %q, repeat = %d", rec.Header().Get("ETag"), again.Code)
+	}
+}
+
+func TestPlayersListStatsAndSort(t *testing.T) {
+	f := setup(t)
+	byVoto := f.playersFull("include=stats&sort=avg_fantavoto")
+	if len(byVoto) != 15 {
+		t.Fatalf("%d players", len(byVoto))
+	}
+	seenNone := false
+	for i, p := range byVoto {
+		if p.Stats == nil && p.Status != api.Unknown {
+			t.Errorf("%s: no stats although listed", p.Name)
+		}
+		var avg *string
+		if p.Stats != nil {
+			avg = p.Stats.AvgFantavoto
+		}
+		if avg == nil {
+			seenNone = true
+			continue
+		}
+		if seenNone {
+			t.Errorf("%s has an average after players without one", p.Name)
+		}
+		if i > 0 && byVoto[i-1].Stats != nil && byVoto[i-1].Stats.AvgFantavoto != nil {
+			prev, cur := *byVoto[i-1].Stats.AvgFantavoto, *avg
+			if len(prev) == len(cur) && prev < cur {
+				t.Errorf("order: %s (%s) before %s (%s)", byVoto[i-1].Name, prev, p.Name, cur)
+			}
+		}
+	}
+	if byVoto[0].Stats == nil || byVoto[0].Stats.AvgFantavoto == nil {
+		t.Fatalf("top player has no average: %+v", byVoto[0])
+	}
+
+	for _, sortBy := range []string{"avg_voto", "avg_fantavoto", "name"} {
+		var want, got []string
+		for _, p := range f.playersFull("sort=" + sortBy) {
+			want = append(want, p.Name)
+		}
+		cursor := ""
+		for i := 0; ; i++ {
+			if i > 20 {
+				t.Fatalf("sort %s: paging does not end", sortBy)
+			}
+			q := "sort=" + sortBy + "&limit=4"
+			if cursor != "" {
+				q += "&cursor=" + cursor
+			}
+			var page playerPage
+			f.get("/v1/players?"+q, 200, &page)
+			for _, p := range page.Players {
+				got = append(got, p.Name)
+			}
+			if page.NextCursor == nil {
+				break
+			}
+			cursor = *page.NextCursor
+		}
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("sort %s: pages walk %v, want %v", sortBy, got, want)
+		}
+	}
+	f.get("/v1/players?sort=goals", 400, nil)
+	if p := f.playersFull("")[0]; p.Stats != nil {
+		t.Errorf("stats without include = %+v", p.Stats)
+	}
+}
+
+func TestFixtureResult(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	var mds struct{ Matchdays []api.Matchday }
+	f.get("/v1/seasons/"+seasons.Seasons[0].Id+"/matchdays", 200, &mds)
+	fx := mds.Matchdays[0].Fixtures[0]
+	if fx.Score == nil || fx.Score.Home != 2 || fx.Score.Away != 2 || fx.Period == nil || *fx.Period != api.Finished {
+		t.Errorf("matchday fixture = score %v period %v", fx.Score, fx.Period)
+	}
+	var runs struct{ Fixture api.Fixture }
+	f.get("/v1/fixtures/"+fx.Id+"/runs", 200, &runs)
+	if runs.Fixture.Score == nil || *runs.Fixture.Score != *fx.Score || runs.Fixture.Period == nil || *runs.Fixture.Period != api.Finished {
+		t.Errorf("fixture of the runs = %+v", runs.Fixture)
+	}
 }

@@ -3,14 +3,17 @@ package ingest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/openfanta/openfanta/internal/provider/httpx"
 	"github.com/openfanta/openfanta/internal/provider/sportmonks"
@@ -195,11 +198,32 @@ func TestLiveFixtureIsNotScoredUntilFinal(t *testing.T) {
 	up.Set("/fixtures/5001", smtest.Fixture(t, "fixture_5001_live.json"))
 	svc := newService(t, st, srv, nil)
 
+	result := func(fixtureID uuid.UUID) (string, string) {
+		t.Helper()
+		row, err := st.Queries().GetFixture(ctx, fixtureID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		score := "-"
+		if row.HomeScore != nil && row.AwayScore != nil {
+			score = strconv.Itoa(int(*row.HomeScore)) + "-" + strconv.Itoa(int(*row.AwayScore))
+		}
+		return score, row.Period
+	}
+
 	rep, _ := svc.IngestMatchday(ctx, "777", 1, Options{})
+	var id uuid.UUID
 	for _, f := range rep.Fixtures {
 		if f.Ref == "5001" && (f.Final || f.RunsCreated != 0 || f.Err != nil) {
 			t.Fatalf("live fixture = %+v", f)
 		}
+		if f.Ref == "5001" {
+			id = f.ID
+		}
+	}
+	// The live score and period are stored although nothing is scored yet.
+	if score, period := result(id); score != "1-1" || period != "first_half" {
+		t.Errorf("live result = %s %s", score, period)
 	}
 	up.Set("/fixtures/5001", ft)
 	rep, _ = svc.IngestMatchday(ctx, "777", 1, Options{})
@@ -207,6 +231,9 @@ func TestLiveFixtureIsNotScoredUntilFinal(t *testing.T) {
 		if f.Ref == "5001" && (!f.Final || f.RunsCreated != 1 || f.FromCache) {
 			t.Fatalf("finished fixture = %+v (live payloads must not be cached as final)", f)
 		}
+	}
+	if score, period := result(id); score != "2-2" || period != "finished" {
+		t.Errorf("final result = %s %s", score, period)
 	}
 }
 
@@ -372,5 +399,181 @@ func TestUnknownMatchday(t *testing.T) {
 	svc := newService(t, st, srv, nil)
 	if _, err := svc.IngestMatchday(ctx, "777", 38, Options{}); err == nil {
 		t.Fatal("expected an error for a matchday without fixtures")
+	}
+}
+
+type squadRow struct {
+	club, role string
+	listed     bool
+	birth      *int16
+}
+
+// squadRows reads player_seasons by player ref (the provider ref is in the name for test data).
+func squadRows(t *testing.T, dbURL string) map[string]squadRow {
+	t.Helper()
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	rows, err := conn.Query(ctx, `SELECT p.name, t.name, COALESCE(ps.role, ''), ps.listed, p.birth_year
+		FROM player_seasons ps JOIN players p ON p.id = ps.player_id JOIN teams t ON t.id = ps.team_id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	got := map[string]squadRow{}
+	for rows.Next() {
+		var name string
+		var r squadRow
+		if err := rows.Scan(&name, &r.club, &r.role, &r.listed, &r.birth); err != nil {
+			t.Fatal(err)
+		}
+		got[name] = r
+	}
+	return got
+}
+
+// squadJSON builds a season squad payload in the shape of the Sportmonks squad endpoint.
+func squadJSON(rows ...[3]any) string { // player id, position id, name
+	var out []string
+	for _, r := range rows {
+		out = append(out, fmt.Sprintf(`{"player_id":%d,"position_id":%d,"player":{"display_name":%q,"date_of_birth":"1999-01-01"}}`, r[0], r[1], r[2]))
+	}
+	return `{"data":[` + strings.Join(out, ",") + `]}`
+}
+
+func currentJSON(rows ...[2]any) string { // player id, end date or ""
+	var out []string
+	for _, r := range rows {
+		end := "null"
+		if r[1] != "" {
+			end = fmt.Sprintf("%q", r[1])
+		}
+		out = append(out, fmt.Sprintf(`{"player_id":%d,"end":%s}`, r[0], end))
+	}
+	return `{"data":[` + strings.Join(out, ",") + `]}`
+}
+
+func TestIngestSquadsStoresClubRoleAndBirthYear(t *testing.T) {
+	st, dbURL := storetest.New(t)
+	up, srv := smtest.New(t)
+	svc := newService(t, st, srv, nil)
+
+	if _, err := svc.IngestSquads(ctx, "777", Options{}); err == nil || !strings.Contains(err.Error(), "ingest a matchday first") {
+		t.Fatalf("squads before any fixture: err = %v", err)
+	}
+	if _, err := svc.IngestMatchday(ctx, "777", 1, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := svc.IngestSquads(ctx, "777", Options{})
+	if err != nil || rep.Teams != 2 || rep.Players != 8 || len(rep.Failed) != 0 {
+		t.Fatalf("report = %+v, err = %v", rep, err)
+	}
+	got := squadRows(t, dbURL)
+	if k := got["Home Keeper"]; k.club != "Home FC" || k.role != "P" || !k.listed || k.birth == nil || *k.birth != 1998 {
+		t.Errorf("Home Keeper = %+v", k)
+	}
+	if d := got["Home Departed"]; d.listed || d.role != "D" || d.club != "Home FC" {
+		t.Errorf("Home Departed = %+v: in the season squad but in no current squad", d)
+	}
+	if m := got["Home Midfielder"]; m.role != "" || m.birth != nil || !m.listed {
+		t.Errorf("Home Midfielder = %+v: missing provider data must stay empty", m)
+	}
+
+	// A second run inside the cache window does not call the provider again.
+	if _, err := svc.IngestSquads(ctx, "777", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if n := up.Count("/squads/seasons/777/teams/100"); n != 1 {
+		t.Errorf("season squad requested %d times, want 1 (cached)", n)
+	}
+	if n := up.Count("/squads/teams/100"); n != 1 {
+		t.Errorf("current squad requested %d times, want 1 (cached)", n)
+	}
+}
+
+func TestIngestSquadsFollowsAPlayerWhoMoved(t *testing.T) {
+	st, dbURL := storetest.New(t)
+	up, srv := smtest.New(t)
+	svc := newService(t, st, srv, nil)
+	if _, err := svc.IngestMatchday(ctx, "777", 1, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	// Mover: in both season squads, now at Away FC. Gone: in both, now nowhere.
+	up.Set("/squads/seasons/777/teams/100", squadJSON([3]any{1001, 24, "Home Keeper"}, [3]any{1002, 27, "Home Striker"}, [3]any{1006, 26, "Mover"}, [3]any{1007, 25, "Gone"}))
+	up.Set("/squads/seasons/777/teams/200", squadJSON([3]any{2001, 24, "Away Keeper"}, [3]any{1006, 26, "Mover"}, [3]any{1007, 25, "Gone"}))
+	// Home Striker's contract ended before today.
+	up.Set("/squads/teams/100", currentJSON([2]any{1001, ""}, [2]any{1002, "2020-01-01"}))
+	up.Set("/squads/teams/200", currentJSON([2]any{2001, ""}, [2]any{1006, "2030-06-30"}))
+
+	rep, err := svc.IngestSquads(ctx, "777", Options{})
+	if err != nil || rep.Players != 5 {
+		t.Fatalf("report = %+v, err = %v", rep, err)
+	}
+	got := squadRows(t, dbURL)
+	if m := got["Mover"]; m.club != "Away FC" || !m.listed {
+		t.Errorf("Mover = %+v, want Away FC listed (the team that has them now)", m)
+	}
+	if g := got["Gone"]; g.club != "Home FC" || g.listed {
+		t.Errorf("Gone = %+v, want not listed with the first team's club", g)
+	}
+	if s := got["Home Striker"]; s.listed {
+		t.Errorf("Home Striker = %+v, want not listed (contract over)", s)
+	}
+	if k := got["Home Keeper"]; !k.listed || k.club != "Home FC" {
+		t.Errorf("Home Keeper = %+v", k)
+	}
+}
+
+func TestIngestSquadsOfAFinishedSeasonListsEveryone(t *testing.T) {
+	st, dbURL := storetest.New(t)
+	up, srv := smtest.New(t)
+	svc := newService(t, st, srv, nil)
+	if _, err := svc.IngestMatchday(ctx, "777", 1, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	// Today's squads say nothing about a season that is over, so they are not even read.
+	season := strings.Replace(smtest.Fixture(t, "season_777.json"), `"is_current": true`, `"is_current": false`, 1)
+	up.Set("/seasons/777", season)
+	if _, err := svc.IngestSquads(ctx, "777", Options{Refresh: true}); err != nil {
+		t.Fatal(err)
+	}
+	if d := squadRows(t, dbURL)["Home Departed"]; !d.listed {
+		t.Errorf("Home Departed = %+v: every player of a finished season was in its squad", d)
+	}
+	if n := up.Count("/squads/teams/100"); n != 0 {
+		t.Errorf("current squad requested %d times for a finished season", n)
+	}
+}
+
+func TestIngestSquadsStoresNothingWhenACurrentSquadFails(t *testing.T) {
+	st, dbURL := storetest.New(t)
+	up, srv := smtest.New(t)
+	svc := newService(t, st, srv, nil)
+	if _, err := svc.IngestMatchday(ctx, "777", 1, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	up.Set("/squads/teams/200", `{`)
+	rep, err := svc.IngestSquads(ctx, "777", Options{})
+	if err == nil || rep.Failed["current/200"] == nil {
+		t.Fatalf("report = %+v, err = %v", rep, err)
+	}
+	if n := len(squadRows(t, dbURL)); n != 0 {
+		t.Errorf("%d players stored although listed status was unknown", n)
+	}
+}
+
+func TestIngestSquadsReportsAFailingTeam(t *testing.T) {
+	st, _ := storetest.New(t)
+	up, srv := smtest.New(t)
+	svc := newService(t, st, srv, nil)
+	if _, err := svc.IngestMatchday(ctx, "777", 1, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	up.Set("/squads/seasons/777/teams/200", `{`)
+	rep, err := svc.IngestSquads(ctx, "777", Options{})
+	if err != nil || rep.Teams != 1 || rep.Failed["200"] == nil {
+		t.Fatalf("report = %+v, err = %v", rep, err)
 	}
 }

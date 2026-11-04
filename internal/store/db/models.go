@@ -82,6 +82,9 @@ type Fixture struct {
 	Kickoff    *time.Time
 	Status     string
 	Exception  string
+	HomeScore  *int16
+	AwayScore  *int16
+	Period     string
 }
 
 type FixtureFact struct {
@@ -109,8 +112,9 @@ type Matchday struct {
 }
 
 type Player struct {
-	ID   uuid.UUID
-	Name string
+	ID        uuid.UUID
+	Name      string
+	BirthYear *int16
 }
 
 type PlayerScore struct {
@@ -139,6 +143,41 @@ type PlayerScore struct {
 	DecisiveGoalsWin    int32
 	DecisiveGoalsDraw   int32
 	PlayerOfTheMatch    bool
+}
+
+type PlayerSeason struct {
+	SeasonID uuid.UUID
+	PlayerID uuid.UUID
+	TeamID   uuid.UUID
+	Role     *string
+	Listed   bool
+}
+
+type PlayerSeasonStat struct {
+	PlayerID            uuid.UUID
+	SeasonID            uuid.UUID
+	SettingsSha256      string
+	VotoSource          string
+	Appearances         int32
+	Minutes             int32
+	GamesWithVoto       int32
+	AvgVoto             *int32
+	AvgFantavoto        *int32
+	Goals               int32
+	PenaltiesScored     int32
+	PenaltiesMissed     int32
+	PenaltiesSaved      int32
+	OwnGoals            int32
+	Assists             int32
+	AssistsSetPiece     int32
+	AssistsContribution int32
+	YellowCards         int32
+	SentOff             int32
+	GoalsConceded       int32
+	CleanSheets         int32
+	DecisiveGoalsWin    int32
+	DecisiveGoalsDraw   int32
+	PlayerOfTheMatch    int32
 }
 
 type ProviderRef struct {

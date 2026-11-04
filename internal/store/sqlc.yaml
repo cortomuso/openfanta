@@ -26,3 +26,12 @@ sql:
               import: time
               type: Time
               pointer: true
+          # Averages of a player with no voto are NULL; sqlc cannot see that through the view.
+          - column: player_season_stats.avg_voto
+            go_type:
+              type: int32
+              pointer: true
+          - column: player_season_stats.avg_fantavoto
+            go_type:
+              type: int32
+              pointer: true

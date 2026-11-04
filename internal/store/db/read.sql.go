@@ -12,6 +12,85 @@ import (
 	"github.com/google/uuid"
 )
 
+const clubLatestSeason = `-- name: ClubLatestSeason :one
+SELECT s.id, s.name, c.id AS competition_id, c.name AS competition_name, c.country AS competition_country
+FROM player_seasons x
+JOIN seasons s ON s.id = x.season_id
+JOIN competitions c ON c.id = s.competition_id
+WHERE x.team_id = $1
+ORDER BY s.name DESC, s.id DESC
+LIMIT 1
+`
+
+type ClubLatestSeasonRow struct {
+	ID                 uuid.UUID
+	Name               string
+	CompetitionID      uuid.UUID
+	CompetitionName    string
+	CompetitionCountry string
+}
+
+// The latest season in which the club has a squad; no row for a club without one.
+func (q *Queries) ClubLatestSeason(ctx context.Context, teamID uuid.UUID) (ClubLatestSeasonRow, error) {
+	row := q.db.QueryRow(ctx, clubLatestSeason, teamID)
+	var i ClubLatestSeasonRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CompetitionID,
+		&i.CompetitionName,
+		&i.CompetitionCountry,
+	)
+	return i, err
+}
+
+const clubSquad = `-- name: ClubSquad :many
+SELECT p.id AS player_id, p.name AS player_name, p.birth_year, x.role, x.listed
+FROM player_seasons x
+JOIN players p ON p.id = x.player_id
+WHERE x.team_id = $1 AND x.season_id = $2
+ORDER BY p.name, p.id
+`
+
+type ClubSquadParams struct {
+	TeamID   uuid.UUID
+	SeasonID uuid.UUID
+}
+
+type ClubSquadRow struct {
+	PlayerID   uuid.UUID
+	PlayerName string
+	BirthYear  *int16
+	Role       *string
+	Listed     bool
+}
+
+func (q *Queries) ClubSquad(ctx context.Context, arg ClubSquadParams) ([]ClubSquadRow, error) {
+	rows, err := q.db.Query(ctx, clubSquad, arg.TeamID, arg.SeasonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClubSquadRow
+	for rows.Next() {
+		var i ClubSquadRow
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.PlayerName,
+			&i.BirthYear,
+			&i.Role,
+			&i.Listed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const fixtureRuns = `-- name: FixtureRuns :many
 SELECT r.id, r.settings_sha256, r.voto_source, r.voto_source_version, r.engine_version, r.input_hash,
        r.supersedes_run_id, r.reason, r.created_at,
@@ -132,8 +211,19 @@ func (q *Queries) FixtureScores(ctx context.Context, arg FixtureScoresParams) ([
 	return items, nil
 }
 
+const getClub = `-- name: GetClub :one
+SELECT id, name FROM teams WHERE id = $1
+`
+
+func (q *Queries) GetClub(ctx context.Context, id uuid.UUID) (Team, error) {
+	row := q.db.QueryRow(ctx, getClub, id)
+	var i Team
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
 const getFixture = `-- name: GetFixture :one
-SELECT f.id, f.kickoff, f.status, f.exception, m.number AS matchday, m.season_id,
+SELECT f.id, f.kickoff, f.status, f.exception, f.home_score, f.away_score, f.period, m.number AS matchday, m.season_id,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
 FROM fixtures f
 JOIN matchdays m ON m.id = f.matchday_id
@@ -147,6 +237,9 @@ type GetFixtureRow struct {
 	Kickoff   *time.Time
 	Status    string
 	Exception string
+	HomeScore *int16
+	AwayScore *int16
+	Period    string
 	Matchday  int32
 	SeasonID  uuid.UUID
 	HomeID    uuid.UUID
@@ -163,6 +256,9 @@ func (q *Queries) GetFixture(ctx context.Context, id uuid.UUID) (GetFixtureRow, 
 		&i.Kickoff,
 		&i.Status,
 		&i.Exception,
+		&i.HomeScore,
+		&i.AwayScore,
+		&i.Period,
 		&i.Matchday,
 		&i.SeasonID,
 		&i.HomeID,
@@ -174,13 +270,62 @@ func (q *Queries) GetFixture(ctx context.Context, id uuid.UUID) (GetFixtureRow, 
 }
 
 const getPlayer = `-- name: GetPlayer :one
-SELECT id, name FROM players WHERE id = $1
+SELECT id, name, birth_year FROM players WHERE id = $1
 `
 
 func (q *Queries) GetPlayer(ctx context.Context, id uuid.UUID) (Player, error) {
 	row := q.db.QueryRow(ctx, getPlayer, id)
 	var i Player
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(&i.ID, &i.Name, &i.BirthYear)
+	return i, err
+}
+
+const getPlayerSeasonStats = `-- name: GetPlayerSeasonStats :one
+SELECT player_id, season_id, settings_sha256, voto_source, appearances, minutes, games_with_voto, avg_voto, avg_fantavoto, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, assists_set_piece, assists_contribution, yellow_cards, sent_off, goals_conceded, clean_sheets, decisive_goals_win, decisive_goals_draw, player_of_the_match FROM player_season_stats
+WHERE player_id = $1 AND season_id = $2 AND settings_sha256 = $3 AND voto_source = $4
+`
+
+type GetPlayerSeasonStatsParams struct {
+	PlayerID       uuid.UUID
+	SeasonID       uuid.UUID
+	SettingsSha256 string
+	VotoSource     string
+}
+
+func (q *Queries) GetPlayerSeasonStats(ctx context.Context, arg GetPlayerSeasonStatsParams) (PlayerSeasonStat, error) {
+	row := q.db.QueryRow(ctx, getPlayerSeasonStats,
+		arg.PlayerID,
+		arg.SeasonID,
+		arg.SettingsSha256,
+		arg.VotoSource,
+	)
+	var i PlayerSeasonStat
+	err := row.Scan(
+		&i.PlayerID,
+		&i.SeasonID,
+		&i.SettingsSha256,
+		&i.VotoSource,
+		&i.Appearances,
+		&i.Minutes,
+		&i.GamesWithVoto,
+		&i.AvgVoto,
+		&i.AvgFantavoto,
+		&i.Goals,
+		&i.PenaltiesScored,
+		&i.PenaltiesMissed,
+		&i.PenaltiesSaved,
+		&i.OwnGoals,
+		&i.Assists,
+		&i.AssistsSetPiece,
+		&i.AssistsContribution,
+		&i.YellowCards,
+		&i.SentOff,
+		&i.GoalsConceded,
+		&i.CleanSheets,
+		&i.DecisiveGoalsWin,
+		&i.DecisiveGoalsDraw,
+		&i.PlayerOfTheMatch,
+	)
 	return i, err
 }
 
@@ -256,6 +401,184 @@ func (q *Queries) HasClosedMatchdayFrom(ctx context.Context, arg HasClosedMatchd
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listClubs = `-- name: ListClubs :many
+SELECT id, name FROM teams ORDER BY name, id
+`
+
+// Clubs are the teams of the competitions; one that never listed a squad still shows up.
+func (q *Queries) ListClubs(ctx context.Context) ([]Team, error) {
+	rows, err := q.db.Query(ctx, listClubs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Team
+	for rows.Next() {
+		var i Team
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlayers = `-- name: ListPlayers :many
+WITH entries AS (
+    SELECT p.id, p.name, p.birth_year, ps.season_id, ps.team_id AS club_id, t.name AS club_name, ps.role, ps.listed
+    FROM players p
+    LEFT JOIN player_seasons ps ON ps.player_id = p.id AND ps.season_id = COALESCE(
+        $5::uuid,
+        (SELECT x.season_id FROM player_seasons x JOIN seasons s ON s.id = x.season_id
+         WHERE x.player_id = p.id ORDER BY s.name DESC, s.id DESC LIMIT 1))
+    LEFT JOIN teams t ON t.id = ps.team_id
+    WHERE ($6::text IS NULL OR p.name ILIKE $6::text ESCAPE '\')
+      AND ($7::text IS NULL OR ps.role = $7::text)
+      AND ($8::uuid IS NULL OR ps.team_id = $8::uuid)
+      AND ($5::uuid IS NULL OR ps.player_id IS NOT NULL)
+      AND ($9::int IS NULL OR p.birth_year >= $9::int)
+      AND ($10::int IS NULL OR p.birth_year <= $10::int)
+), ranked AS (
+    SELECT e.id, e.name, e.birth_year, e.season_id, e.club_id, e.club_name, e.role, e.listed, st.appearances, st.minutes, st.games_with_voto, st.avg_voto, st.avg_fantavoto,
+           st.goals, st.penalties_scored, st.penalties_missed, st.penalties_saved, st.own_goals,
+           st.assists, st.assists_set_piece, st.assists_contribution, st.yellow_cards, st.sent_off,
+           st.goals_conceded, st.clean_sheets, st.decisive_goals_win, st.decisive_goals_draw, st.player_of_the_match,
+           (CASE $11::text WHEN 'avg_voto' THEN st.avg_voto WHEN 'avg_fantavoto' THEN st.avg_fantavoto END)::int AS sort_value
+    FROM entries e
+    LEFT JOIN player_season_stats st ON st.player_id = e.id AND st.season_id = e.season_id
+         AND st.settings_sha256 = $12::text AND st.voto_source = $13::text
+)
+SELECT r.id, r.name, r.birth_year, r.season_id, r.club_id, r.club_name, r.role, r.listed, r.appearances, r.minutes, r.games_with_voto, r.avg_voto, r.avg_fantavoto, r.goals, r.penalties_scored, r.penalties_missed, r.penalties_saved, r.own_goals, r.assists, r.assists_set_piece, r.assists_contribution, r.yellow_cards, r.sent_off, r.goals_conceded, r.clean_sheets, r.decisive_goals_win, r.decisive_goals_draw, r.player_of_the_match
+FROM ranked r
+WHERE $1::text IS NULL
+   OR CASE WHEN $2::int IS NULL
+           THEN r.sort_value IS NULL AND (r.name, r.id) > ($1::text, $3::uuid)
+           ELSE r.sort_value IS NULL OR r.sort_value < $2::int
+                OR (r.sort_value = $2::int AND (r.name, r.id) > ($1::text, $3::uuid))
+      END
+ORDER BY r.sort_value DESC NULLS LAST, r.name, r.id
+LIMIT $4::int
+`
+
+type ListPlayersParams struct {
+	AfterName      *string
+	AfterSort      *int32
+	AfterID        *uuid.UUID
+	RowLimit       int32
+	SeasonID       *uuid.UUID
+	NamePattern    *string
+	Role           *string
+	ClubID         *uuid.UUID
+	BirthFrom      *int32
+	BirthTo        *int32
+	Sort           string
+	SettingsSha256 string
+	VotoSource     string
+}
+
+type ListPlayersRow struct {
+	ID                  uuid.UUID
+	Name                string
+	BirthYear           *int16
+	SeasonID            *uuid.UUID
+	ClubID              *uuid.UUID
+	ClubName            *string
+	Role                *string
+	Listed              *bool
+	Appearances         *int32
+	Minutes             *int32
+	GamesWithVoto       *int32
+	AvgVoto             *int32
+	AvgFantavoto        *int32
+	Goals               *int32
+	PenaltiesScored     *int32
+	PenaltiesMissed     *int32
+	PenaltiesSaved      *int32
+	OwnGoals            *int32
+	Assists             *int32
+	AssistsSetPiece     *int32
+	AssistsContribution *int32
+	YellowCards         *int32
+	SentOff             *int32
+	GoalsConceded       *int32
+	CleanSheets         *int32
+	DecisiveGoalsWin    *int32
+	DecisiveGoalsDraw   *int32
+	PlayerOfTheMatch    *int32
+}
+
+// Players with the club, role and status of one season: the requested one, else each player's
+// latest. A requested season also keeps only players listed in it. The statistics are those of
+// that same season under the given settings and voto source. Order: the sort value (an average,
+// highest first, players without one last; NULL throughout for the name sort), then name, then id.
+// The after_* values are the last row of the previous page; after_name is NULL on the first page
+// and after_sort is NULL when that last row had no sort value.
+func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]ListPlayersRow, error) {
+	rows, err := q.db.Query(ctx, listPlayers,
+		arg.AfterName,
+		arg.AfterSort,
+		arg.AfterID,
+		arg.RowLimit,
+		arg.SeasonID,
+		arg.NamePattern,
+		arg.Role,
+		arg.ClubID,
+		arg.BirthFrom,
+		arg.BirthTo,
+		arg.Sort,
+		arg.SettingsSha256,
+		arg.VotoSource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlayersRow
+	for rows.Next() {
+		var i ListPlayersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.BirthYear,
+			&i.SeasonID,
+			&i.ClubID,
+			&i.ClubName,
+			&i.Role,
+			&i.Listed,
+			&i.Appearances,
+			&i.Minutes,
+			&i.GamesWithVoto,
+			&i.AvgVoto,
+			&i.AvgFantavoto,
+			&i.Goals,
+			&i.PenaltiesScored,
+			&i.PenaltiesMissed,
+			&i.PenaltiesSaved,
+			&i.OwnGoals,
+			&i.Assists,
+			&i.AssistsSetPiece,
+			&i.AssistsContribution,
+			&i.YellowCards,
+			&i.SentOff,
+			&i.GoalsConceded,
+			&i.CleanSheets,
+			&i.DecisiveGoalsWin,
+			&i.DecisiveGoalsDraw,
+			&i.PlayerOfTheMatch,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSeasons = `-- name: ListSeasons :many
@@ -423,6 +746,51 @@ func (q *Queries) MatchdayScores(ctx context.Context, arg MatchdayScoresParams) 
 	return items, nil
 }
 
+const playerClubHistory = `-- name: PlayerClubHistory :many
+SELECT x.season_id, s.name AS season_name, x.team_id AS club_id, t.name AS club_name, x.role, x.listed
+FROM player_seasons x
+JOIN seasons s ON s.id = x.season_id
+JOIN teams t ON t.id = x.team_id
+WHERE x.player_id = $1
+ORDER BY s.name DESC, s.id DESC
+`
+
+type PlayerClubHistoryRow struct {
+	SeasonID   uuid.UUID
+	SeasonName string
+	ClubID     uuid.UUID
+	ClubName   string
+	Role       *string
+	Listed     bool
+}
+
+func (q *Queries) PlayerClubHistory(ctx context.Context, playerID uuid.UUID) ([]PlayerClubHistoryRow, error) {
+	rows, err := q.db.Query(ctx, playerClubHistory, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PlayerClubHistoryRow
+	for rows.Next() {
+		var i PlayerClubHistoryRow
+		if err := rows.Scan(
+			&i.SeasonID,
+			&i.SeasonName,
+			&i.ClubID,
+			&i.ClubName,
+			&i.Role,
+			&i.Listed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const playerSeasonScores = `-- name: PlayerSeasonScores :many
 SELECT player_id, player_name, team_id, team_name, fixture_id, season_id, matchday, kickoff, role, minutes, voto, fantavoto, senza_voto, voto_ufficio, breakdown, goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, yellow_cards, sent_off, goals_conceded, clean_sheet, assists_set_piece, assists_contribution, decisive_goals_win, decisive_goals_draw, player_of_the_match, run_id, settings_sha256, voto_source, computed_at FROM current_scores
 WHERE season_id = $1 AND player_id = $2 AND settings_sha256 = $3 AND voto_source = $4
@@ -497,7 +865,7 @@ func (q *Queries) PlayerSeasonScores(ctx context.Context, arg PlayerSeasonScores
 }
 
 const seasonFixtures = `-- name: SeasonFixtures :many
-SELECT m.number AS matchday, f.id, f.kickoff, f.status, f.exception,
+SELECT m.number AS matchday, f.id, f.kickoff, f.status, f.exception, f.home_score, f.away_score, f.period,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
 FROM matchdays m
 JOIN fixtures f ON f.matchday_id = m.id
@@ -513,6 +881,9 @@ type SeasonFixturesRow struct {
 	Kickoff   *time.Time
 	Status    string
 	Exception string
+	HomeScore *int16
+	AwayScore *int16
+	Period    string
 	HomeID    uuid.UUID
 	HomeName  string
 	AwayID    uuid.UUID
@@ -534,11 +905,56 @@ func (q *Queries) SeasonFixtures(ctx context.Context, seasonID uuid.UUID) ([]Sea
 			&i.Kickoff,
 			&i.Status,
 			&i.Exception,
+			&i.HomeScore,
+			&i.AwayScore,
+			&i.Period,
 			&i.HomeID,
 			&i.HomeName,
 			&i.AwayID,
 			&i.AwayName,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const seasonTeamRefs = `-- name: SeasonTeamRefs :many
+SELECT DISTINCT r.external_id, t.id, t.name
+FROM matchdays m
+JOIN fixtures f ON f.matchday_id = m.id
+JOIN teams t ON t.id IN (f.home_team_id, f.away_team_id)
+JOIN provider_refs r ON r.entity = 'team' AND r.entity_id = t.id AND r.provider = $2
+WHERE m.season_id = $1
+ORDER BY r.external_id
+`
+
+type SeasonTeamRefsParams struct {
+	SeasonID uuid.UUID
+	Provider string
+}
+
+type SeasonTeamRefsRow struct {
+	ExternalID string
+	ID         uuid.UUID
+	Name       string
+}
+
+// The provider refs of the teams that play in a season, for fetching their squads.
+func (q *Queries) SeasonTeamRefs(ctx context.Context, arg SeasonTeamRefsParams) ([]SeasonTeamRefsRow, error) {
+	rows, err := q.db.Query(ctx, seasonTeamRefs, arg.SeasonID, arg.Provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SeasonTeamRefsRow
+	for rows.Next() {
+		var i SeasonTeamRefsRow
+		if err := rows.Scan(&i.ExternalID, &i.ID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
