@@ -25,4 +25,4 @@ project. When real data shows a shape these files miss (for example, real payloa
 person ID in `player_id` on a card event), reproduce the shape here with invented IDs and names.
 To check the parser against real data locally, ingest a matchday and re-run it offline with
 `openfanta recompute --reparse`; raw responses stay in your own `raw_payloads` table.
-Never commit an API token.
+Never commit an API token (CI runs gitleaks; `make secrets` runs it locally).
