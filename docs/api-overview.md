@@ -19,6 +19,10 @@ GET /v1/settings/default
 GET /healthz                GET /readyz
 ```
 
+Lists take `limit` (1 to 200) and an opaque `cursor`; while more rows follow the response has a
+`next_cursor`, which you pass back as `cursor`. Without either parameter you get the whole list.
+Never build or parse a cursor, and a bad `limit` or `cursor` is a `400` problem.
+
 Scores are decimal strings with two digits (`"6.38"`), never floats. `voto` is the provider
 rating unrounded; each score also carries the player's match `stats` (goals, assists, cards,
 goals conceded, ...). Errors are RFC 9457

@@ -91,7 +91,7 @@ Code: `internal/voto/voto.go`, `internal/voto/openstat/`, `settings.Rounding` in
 not 3.1, because oapi-codegen and kin-openapi only fully support 3.0. Conventions chosen so the
 API can be opened up later: versioned `/v1`, opaque UUIDv7 IDs (provider IDs never leak), decimals
 as two-digit strings (no float drift for other implementations), RFC 9457 problem+json, ETags.
-Cursor pagination will come once a list can grow unbounded.
+Lists paginate with `limit` and an opaque `cursor` (see the 2026-11-04 decision in §10).
 
 ## 3. Data model
 Code: `internal/store/migrations/` (schema) and `internal/store/queries/` (access paths).
@@ -170,6 +170,7 @@ A full example document (a Classic league, and how Mantra fits the same structur
 
 ## 10. Decision log
 
+- **2026-11-04: cursor pagination (#145).** Every list takes `limit` (1 to 200) and `cursor`, and answers `next_cursor` while more rows follow; the last page has none, so an exact multiple of `limit` ends without an empty page. A cursor is opaque (`v1.` plus the base64url key of the last row), and the next page starts after that row in a fixed, documented order, so inserts elsewhere never move a page. Bad `limit` or `cursor` is a 400 problem. **Additive:** a request with neither parameter returns the whole list, as before, so `/v1` clients are unaffected; lists that can grow without bound (players, clubs) will default to a page of 50. Applied to seasons and the three score lists; the matchdays list is bounded (about 38) and stays whole. These lists are read in full and sliced in the handler, which is fine for a season; large catalog lists (#146) page in SQL with a keyset condition `(sort key, id) > (...)`, and every list query must keep a unique id as its last sort column.
 - **2026-10-27: licence AGPL-3.0** (chosen by the owner).
 - **2026-10-27: base voto at two-decimal precision.** `voto` is the provider rating unrounded (`6.38`). Rounding moved from the voto source into league settings.
 - **2026-11-03: voto source and rounding live in the settings document** (`voto.source`, `voto.rounding`, schema 1.2), so they are part of the settings hash and a change is a new run. A document without `voto` is provider rating, unrounded, which keeps the Classic hash. Only the source's voto is rounded, never a voto d'ufficio. There is no editorial source: Sportmonks has none, so the second and third sources are derived from the match.

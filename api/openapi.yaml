@@ -13,6 +13,10 @@ info:
       default uses the provider rating unrounded.
     - Rule set bodies are returned as published: point values there are integer hundredths.
     - Errors use RFC 9457 `application/problem+json`.
+    - Lists take `limit` (1 to 200) and an opaque `cursor`, and answer `next_cursor` while more
+      rows follow. Pass `next_cursor` back as `cursor` for the next page; never build or parse
+      one. A request with neither parameter returns the whole list. Order is fixed and documented
+      per endpoint, so pages never overlap.
     - Responses carry an `ETag`; send `If-None-Match` to get `304 Not Modified`.
   license:
     name: AGPL-3.0
@@ -120,9 +124,12 @@ paths:
       tags: [catalog]
       operationId: listSeasons
       summary: List seasons
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
-          description: Seasons with ingested data.
+          description: Seasons with ingested data, ordered by competition name, then season name (newest first).
           content:
             application/json:
               schema:
@@ -132,6 +139,9 @@ paths:
                   seasons:
                     type: array
                     items: { $ref: "#/components/schemas/Season" }
+                  next_cursor: { $ref: "#/components/schemas/NextCursor" }
+        "400":
+          $ref: "#/components/responses/Problem"
   /v1/seasons/{seasonId}/matchdays:
     get:
       tags: [catalog]
@@ -165,6 +175,8 @@ paths:
         - $ref: "#/components/parameters/SeasonId"
         - { name: number, in: path, required: true, schema: { type: integer, minimum: 1 } }
         - $ref: "#/components/parameters/VotoSourceQuery"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
           description: Scores, ordered by fixture kickoff, team and player name.
@@ -184,6 +196,8 @@ paths:
         - $ref: "#/components/parameters/SeasonId"
         - $ref: "#/components/parameters/PlayerId"
         - $ref: "#/components/parameters/VotoSourceQuery"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
           description: Scores ordered by matchday.
@@ -202,6 +216,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/FixtureId"
         - $ref: "#/components/parameters/VotoSourceQuery"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
           description: Scores ordered by team and player name.
@@ -262,6 +278,16 @@ components:
       { name: playerId, in: path, required: true, schema: { type: string, format: uuid } }
     FixtureId:
       { name: fixtureId, in: path, required: true, schema: { type: string, format: uuid } }
+    Limit:
+      name: limit
+      in: query
+      description: Page size, 1 to 200. Without `limit` and `cursor` the whole list is returned.
+      schema: { type: integer, minimum: 1, maximum: 200 }
+    Cursor:
+      name: cursor
+      in: query
+      description: The `next_cursor` of the previous page.
+      schema: { type: string }
     VotoSourceQuery:
       name: voto_source
       in: query
@@ -324,6 +350,9 @@ components:
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
+    NextCursor:
+      type: string
+      description: Present when more rows follow; pass it as `cursor` to get them.
     Decimal:
       type: string
       pattern: "^-?[0-9]+\\.[0-9]{2}$"
@@ -439,6 +468,7 @@ components:
         scores:
           type: array
           items: { $ref: "#/components/schemas/Score" }
+        next_cursor: { $ref: "#/components/schemas/NextCursor" }
     Run:
       type: object
       required: [id, settings_sha256, voto_source, engine_version, input_hash, reason, created_at, current]

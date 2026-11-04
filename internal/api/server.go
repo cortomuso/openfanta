@@ -60,6 +60,11 @@ func notFound(format string, args ...any) Problem {
 	return Problem{Type: "about:blank", Title: http.StatusText(http.StatusNotFound), Status: http.StatusNotFound, Detail: &detail}
 }
 
+func badRequest(err error) Problem {
+	detail := err.Error()
+	return Problem{Type: "about:blank", Title: http.StatusText(http.StatusBadRequest), Status: http.StatusBadRequest, Detail: &detail}
+}
+
 func writeProblem(w http.ResponseWriter, status int, detail string) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
@@ -129,16 +134,28 @@ func (s *Server) ListVotoSources(_ context.Context, _ ListVotoSourcesRequestObje
 }
 
 // ListSeasons implements StrictServerInterface.
-func (s *Server) ListSeasons(ctx context.Context, _ ListSeasonsRequestObject) (ListSeasonsResponseObject, error) {
+func (s *Server) ListSeasons(ctx context.Context, req ListSeasonsRequestObject) (ListSeasonsResponseObject, error) {
 	rows, err := s.q.ListSeasons(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := ListSeasons200JSONResponse{Seasons: make([]Season, 0, len(rows))}
-	for _, r := range rows {
+	page, next, err := paginate(rows, func(r db.ListSeasonsRow) string { return r.ID.String() }, req.Params.Limit, req.Params.Cursor)
+	if err != nil {
+		return ListSeasons400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(err))}, nil
+	}
+	out := ListSeasons200JSONResponse{Seasons: make([]Season, 0, len(page)), NextCursor: nextCursor(next)}
+	for _, r := range page {
 		out.Seasons = append(out.Seasons, season(db.GetSeasonRow(r)))
 	}
 	return out, nil
+}
+
+// nextCursor maps the "" of a last page to an absent field.
+func nextCursor(c string) *NextCursor {
+	if c == "" {
+		return nil
+	}
+	return &c
 }
 
 func season(r db.GetSeasonRow) Season {
@@ -189,7 +206,10 @@ func (s *Server) GetMatchdayScores(ctx context.Context, req GetMatchdayScoresReq
 	if err != nil {
 		return nil, err
 	}
-	list, err := scoreList(rs, vs, rows)
+	list, err := scoreList(rs, vs, rows, req.Params.Limit, req.Params.Cursor)
+	if bp := (badPageError{}); errors.As(err, &bp) {
+		return GetMatchdayScores400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(bp.error))}, nil
+	}
 	return GetMatchdayScores200JSONResponse(list), err
 }
 
@@ -210,7 +230,10 @@ func (s *Server) GetPlayerSeasonScores(ctx context.Context, req GetPlayerSeasonS
 	if err != nil {
 		return nil, err
 	}
-	list, err := scoreList(rs, vs, rows)
+	list, err := scoreList(rs, vs, rows, req.Params.Limit, req.Params.Cursor)
+	if bp := (badPageError{}); errors.As(err, &bp) {
+		return GetPlayerSeasonScores400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(bp.error))}, nil
+	}
 	return GetPlayerSeasonScores200JSONResponse(list), err
 }
 
@@ -226,7 +249,10 @@ func (s *Server) GetFixtureScores(ctx context.Context, req GetFixtureScoresReque
 	if err != nil {
 		return nil, err
 	}
-	list, err := scoreList(rs, vs, rows)
+	list, err := scoreList(rs, vs, rows, req.Params.Limit, req.Params.Cursor)
+	if bp := (badPageError{}); errors.As(err, &bp) {
+		return GetFixtureScores400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(bp.error))}, nil
+	}
 	return GetFixtureScores200JSONResponse(list), err
 }
 
@@ -276,9 +302,18 @@ func (s *Server) GetPlayer(ctx context.Context, req GetPlayerRequestObject) (Get
 	return GetPlayer200JSONResponse{Id: p.ID.String(), Name: p.Name}, nil
 }
 
-func scoreList(rs, vs string, rows []db.CurrentScore) (ScoreList, error) {
-	out := ScoreList{SettingsSha256: rs, VotoSource: vs, Scores: make([]Score, 0, len(rows))}
-	for _, r := range rows {
+// badPageError carries a limit or cursor error so handlers answer 400 instead of 500.
+type badPageError struct{ error }
+
+func (e badPageError) Unwrap() error { return e.error }
+
+func scoreList(rs, vs string, rows []db.CurrentScore, limit *int, cursor *string) (ScoreList, error) {
+	page, next, err := paginate(rows, func(r db.CurrentScore) string { return r.FixtureID.String() + "/" + r.PlayerID.String() }, limit, cursor)
+	if err != nil {
+		return ScoreList{}, badPageError{err}
+	}
+	out := ScoreList{SettingsSha256: rs, VotoSource: vs, Scores: make([]Score, 0, len(page)), NextCursor: nextCursor(next)}
+	for _, r := range page {
 		sc, err := score(r)
 		if err != nil {
 			return ScoreList{}, err

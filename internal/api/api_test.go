@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -328,4 +329,84 @@ func TestStoreErrorsBecome500(t *testing.T) {
 		t.Errorf("closed store: %d %v %s", rec.Code, rec.Header(), rec.Body)
 	}
 	_ = store.ErrNotFound
+}
+
+// walkScores follows next_cursor through a score list and returns the player ids in order.
+func (f *fixture) walkScores(path string, limit int) []string {
+	f.t.Helper()
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	var ids []string
+	cursor := ""
+	for i := 0; i < 100; i++ {
+		url := path + sep + "limit=" + strconv.Itoa(limit)
+		if cursor != "" {
+			url += "&cursor=" + cursor
+		}
+		var page api.ScoreList
+		f.get(url, 200, &page)
+		if len(page.Scores) > limit {
+			f.t.Fatalf("%s: %d rows for limit %d", url, len(page.Scores), limit)
+		}
+		for _, s := range page.Scores {
+			ids = append(ids, s.FixtureId+"/"+s.Player.Id)
+		}
+		if page.NextCursor == nil {
+			return ids
+		}
+		cursor = *page.NextCursor
+	}
+	f.t.Fatalf("%s: paging does not end", path)
+	return nil
+}
+
+func TestScoreListPagination(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	var mds struct{ Matchdays []api.Matchday }
+	f.get("/v1/seasons/"+seasons.Seasons[0].Id+"/matchdays", 200, &mds)
+	path := "/v1/seasons/" + seasons.Seasons[0].Id + "/matchdays/1/scores"
+
+	var all api.ScoreList
+	f.get(path, 200, &all)
+	if all.NextCursor != nil || len(all.Scores) < 3 {
+		t.Fatalf("unpaged list: next=%v rows=%d", all.NextCursor, len(all.Scores))
+	}
+	want := make([]string, len(all.Scores))
+	for i, s := range all.Scores {
+		want[i] = s.FixtureId + "/" + s.Player.Id
+	}
+	// Page sizes below, at and above the list length, including an exact divisor.
+	for _, limit := range []int{1, 2, len(want), len(want) + 1} {
+		got := f.walkScores(path, limit)
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("limit %d: pages differ from the whole list:\n got %v\nwant %v", limit, got, want)
+		}
+	}
+}
+
+func TestPaginationErrors(t *testing.T) {
+	f := setup(t)
+	for _, q := range []string{"limit=0", "limit=201", "limit=x", "cursor=garbage", "cursor=v1.bm9wZQ"} {
+		var p api.Problem
+		rec := f.get("/v1/seasons?"+q, 400, &p)
+		if rec.Header().Get("Content-Type") != "application/problem+json" || p.Status != 400 {
+			t.Errorf("%s: %s %+v", q, rec.Header().Get("Content-Type"), p)
+		}
+	}
+}
+
+func TestSeasonsPagination(t *testing.T) {
+	f := setup(t)
+	var page struct {
+		Seasons    []api.Season
+		NextCursor *string `json:"next_cursor"`
+	}
+	f.get("/v1/seasons?limit=1", 200, &page)
+	if len(page.Seasons) != 1 {
+		t.Fatalf("limit=1 returned %d seasons", len(page.Seasons))
+	}
 }
