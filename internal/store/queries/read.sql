@@ -47,17 +47,6 @@ SELECT EXISTS (SELECT 1 FROM matchdays WHERE season_id = $1 AND number = $2);
 -- name: GetPlayer :one
 SELECT id, name, birth_year FROM players WHERE id = $1;
 
--- name: GetPlayerLatestSquadEntry :one
--- The club, role and status of a player's latest season in the squads; no row for a player no
--- squad ever named.
-SELECT x.team_id AS club_id, t.name AS club_name, x.role, x.listed
-FROM player_seasons x
-JOIN seasons s ON s.id = x.season_id
-JOIN teams t ON t.id = x.team_id
-WHERE x.player_id = $1
-ORDER BY s.name DESC, s.id DESC
-LIMIT 1;
-
 -- name: SeasonTeamRefs :many
 -- The provider refs of the teams that play in a season, for fetching their squads.
 SELECT DISTINCT r.external_id, t.id, t.name
@@ -91,3 +80,35 @@ SELECT * FROM settings_versions WHERE league_id = $1 AND seq = $2;
 SELECT EXISTS (
     SELECT 1 FROM matchdays WHERE season_id = $1 AND number >= $2 AND closed_at IS NOT NULL
 );
+
+-- name: ListClubs :many
+-- Clubs are the teams of the competitions; one that never listed a squad still shows up.
+SELECT id, name FROM teams ORDER BY name, id;
+
+-- name: GetClub :one
+SELECT id, name FROM teams WHERE id = $1;
+
+-- name: ClubLatestSeason :one
+-- The latest season in which the club has a squad; no row for a club without one.
+SELECT s.id, s.name, c.id AS competition_id, c.name AS competition_name, c.country AS competition_country
+FROM player_seasons x
+JOIN seasons s ON s.id = x.season_id
+JOIN competitions c ON c.id = s.competition_id
+WHERE x.team_id = $1
+ORDER BY s.name DESC, s.id DESC
+LIMIT 1;
+
+-- name: ClubSquad :many
+SELECT p.id AS player_id, p.name AS player_name, p.birth_year, x.role, x.listed
+FROM player_seasons x
+JOIN players p ON p.id = x.player_id
+WHERE x.team_id = $1 AND x.season_id = $2
+ORDER BY p.name, p.id;
+
+-- name: PlayerClubHistory :many
+SELECT x.season_id, s.name AS season_name, x.team_id AS club_id, t.name AS club_name, x.role, x.listed
+FROM player_seasons x
+JOIN seasons s ON s.id = x.season_id
+JOIN teams t ON t.id = x.team_id
+WHERE x.player_id = $1
+ORDER BY s.name DESC, s.id DESC;

@@ -445,3 +445,76 @@ func TestPlayerProfile(t *testing.T) {
 		t.Errorf("Away Defender = %+v", u)
 	}
 }
+
+func TestClubsAndSquads(t *testing.T) {
+	f := setup(t)
+
+	var clubs struct {
+		Clubs      []api.Ref
+		NextCursor *string `json:"next_cursor"`
+	}
+	f.get("/v1/clubs", 200, &clubs)
+	if len(clubs.Clubs) != 2 || clubs.Clubs[0].Name != "Away FC" || clubs.Clubs[1].Name != "Home FC" {
+		t.Fatalf("clubs = %+v", clubs)
+	}
+	f.get("/v1/clubs?limit=1", 200, &clubs)
+	if len(clubs.Clubs) != 1 || clubs.NextCursor == nil {
+		t.Fatalf("first page = %+v", clubs)
+	}
+	var second struct{ Clubs []api.Ref }
+	f.get("/v1/clubs?limit=1&cursor="+*clubs.NextCursor, 200, &second)
+	if len(second.Clubs) != 1 || second.Clubs[0].Name != "Home FC" {
+		t.Fatalf("second page = %+v", second)
+	}
+
+	home := second.Clubs[0].Id
+	var squad struct {
+		Club    api.Ref
+		Season  *api.Season
+		Players []api.SquadPlayer
+	}
+	f.get("/v1/clubs/"+home+"/players", 200, &squad)
+	if squad.Season == nil || squad.Season.Name != "2026/2027" || len(squad.Players) != 6 {
+		t.Fatalf("squad = %+v", squad)
+	}
+	by := map[string]api.SquadPlayer{}
+	for _, p := range squad.Players {
+		by[p.Player.Name] = p
+	}
+	if d := by["Home Departed"]; d.Status != api.NoLongerListed || len(d.Roles) != 1 || d.Roles[0] != api.D {
+		t.Errorf("Home Departed = %+v: a player who left must be flagged, not dropped", d)
+	}
+	if k := by["Home Keeper"]; k.Status != api.Listed || k.BirthYear == nil || *k.BirthYear != 1998 {
+		t.Errorf("Home Keeper = %+v", k)
+	}
+	f.get("/v1/clubs/"+home+"/players?season="+squad.Season.Id+"&limit=4", 200, &squad)
+	if len(squad.Players) != 4 {
+		t.Errorf("limit=4 returned %d players", len(squad.Players))
+	}
+
+	f.get("/v1/clubs/"+home+"/players?season=0190a0a0-0000-7000-8000-000000000009", 404, nil)
+
+	f.get("/v1/clubs/0190a0a0-0000-7000-8000-000000000009/players", 404, nil)
+	f.get("/v1/clubs/not-a-uuid/players", 400, nil)
+	f.get("/v1/clubs/"+home+"/players?cursor=garbage", 400, nil)
+}
+
+func TestPlayerClubHistory(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	var list api.ScoreList
+	f.get("/v1/seasons/"+seasons.Seasons[0].Id+"/matchdays/1/scores", 200, &list)
+	var id string
+	for _, s := range list.Scores {
+		if s.Player.Name == "Home Striker" {
+			id = s.Player.Id
+		}
+	}
+	var p api.Player
+	f.get("/v1/players/"+id, 200, &p)
+	if len(p.ClubHistory) != 1 || p.ClubHistory[0].Season.Name != "2026/2027" || p.ClubHistory[0].Club.Name != "Home FC" ||
+		p.ClubHistory[0].Roles[0] != api.A || p.Club == nil || p.Club.Id != p.ClubHistory[0].Club.Id {
+		t.Errorf("history = %+v", p.ClubHistory)
+	}
+}

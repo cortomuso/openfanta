@@ -299,36 +299,114 @@ func (s *Server) GetPlayer(ctx context.Context, req GetPlayerRequestObject) (Get
 	if err != nil {
 		return nil, err
 	}
-	var squad *db.GetPlayerLatestSquadEntryRow
-	switch e, err := s.q.GetPlayerLatestSquadEntry(ctx, req.PlayerId); {
-	case err == nil:
-		squad = &e
-	case !errors.Is(err, pgx.ErrNoRows):
+	history, err := s.q.PlayerClubHistory(ctx, req.PlayerId)
+	if err != nil {
 		return nil, err
 	}
-	return GetPlayer200JSONResponse(player(p, squad)), nil
+	return GetPlayer200JSONResponse(player(p, history)), nil
 }
 
-// player maps the stored profile to the API. Roles, club and status stay empty or unknown
-// when no squad named the player: nothing is guessed from match data.
-func player(p db.Player, squad *db.GetPlayerLatestSquadEntryRow) Player {
-	out := Player{Id: p.ID.String(), Name: p.Name, Roles: []PlayerRole{}, Status: Unknown}
+// squadStatus maps a squad entry's listed flag to the API status.
+func squadStatus(listed bool) PlayerStatus {
+	if listed {
+		return Listed
+	}
+	return NoLongerListed
+}
+
+func squadRoles(role *string) []PlayerRole {
+	if role == nil {
+		return []PlayerRole{}
+	}
+	return []PlayerRole{PlayerRole(*role)}
+}
+
+// player maps the stored profile to the API. Roles, club and status are those of the latest
+// season in history (latest first) and stay empty or unknown when no squad named the player:
+// nothing is guessed from match data.
+func player(p db.Player, history []db.PlayerClubHistoryRow) Player {
+	out := Player{Id: p.ID.String(), Name: p.Name, Roles: []PlayerRole{}, Status: Unknown, ClubHistory: make([]ClubSeason, 0, len(history))}
 	if p.BirthYear != nil {
 		y := int(*p.BirthYear)
 		out.BirthYear = &y
 	}
-	if squad == nil {
-		return out
+	for _, h := range history {
+		cs := ClubSeason{Club: Ref{Id: h.ClubID.String(), Name: h.ClubName}, Roles: squadRoles(h.Role), Status: squadStatus(h.Listed)}
+		cs.Season.Id, cs.Season.Name = h.SeasonID.String(), h.SeasonName
+		out.ClubHistory = append(out.ClubHistory, cs)
 	}
-	out.Club = &Ref{Id: squad.ClubID.String(), Name: squad.ClubName}
-	if squad.Role != nil {
-		out.Roles = append(out.Roles, PlayerRole(*squad.Role))
-	}
-	out.Status = NoLongerListed
-	if squad.Listed {
-		out.Status = Listed
+	if len(history) > 0 {
+		out.Club = &out.ClubHistory[0].Club
+		out.Roles = out.ClubHistory[0].Roles
+		out.Status = out.ClubHistory[0].Status
 	}
 	return out
+}
+
+// ListClubs implements StrictServerInterface.
+func (s *Server) ListClubs(ctx context.Context, req ListClubsRequestObject) (ListClubsResponseObject, error) {
+	rows, err := s.q.ListClubs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	page, next, err := paginate(rows, func(r db.Team) string { return r.ID.String() }, req.Params.Limit, req.Params.Cursor)
+	if err != nil {
+		return ListClubs400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(err))}, nil
+	}
+	out := ListClubs200JSONResponse{Clubs: make([]Ref, 0, len(page)), NextCursor: nextCursor(next)}
+	for _, r := range page {
+		out.Clubs = append(out.Clubs, Ref{Id: r.ID.String(), Name: r.Name})
+	}
+	return out, nil
+}
+
+// ListClubPlayers implements StrictServerInterface.
+func (s *Server) ListClubPlayers(ctx context.Context, req ListClubPlayersRequestObject) (ListClubPlayersResponseObject, error) {
+	club, err := s.q.GetClub(ctx, req.ClubId)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ListClubPlayers404ApplicationProblemPlusJSONResponse(notFound("club %s not found", req.ClubId)), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var se db.GetSeasonRow
+	if req.Params.Season != nil {
+		se, err = s.q.GetSeason(ctx, *req.Params.Season)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ListClubPlayers404ApplicationProblemPlusJSONResponse(notFound("season %s not found", *req.Params.Season)), nil
+		}
+	} else {
+		var latest db.ClubLatestSeasonRow
+		latest, err = s.q.ClubLatestSeason(ctx, req.ClubId)
+		se = db.GetSeasonRow(latest)
+	}
+	out := ListClubPlayers200JSONResponse{Club: Ref{Id: club.ID.String(), Name: club.Name}, Players: []SquadPlayer{}}
+	switch {
+	case errors.Is(err, pgx.ErrNoRows): // a club without a squad has no season to show
+		return out, nil
+	case err != nil:
+		return nil, err
+	}
+	sv := season(se)
+	out.Season = &sv
+	rows, err := s.q.ClubSquad(ctx, db.ClubSquadParams{TeamID: req.ClubId, SeasonID: se.ID})
+	if err != nil {
+		return nil, err
+	}
+	page, next, err := paginate(rows, func(r db.ClubSquadRow) string { return r.PlayerID.String() }, req.Params.Limit, req.Params.Cursor)
+	if err != nil {
+		return ListClubPlayers400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(err))}, nil
+	}
+	out.NextCursor = nextCursor(next)
+	for _, r := range page {
+		sp := SquadPlayer{Player: Ref{Id: r.PlayerID.String(), Name: r.PlayerName}, Roles: squadRoles(r.Role), Status: squadStatus(r.Listed)}
+		if r.BirthYear != nil {
+			y := int(*r.BirthYear)
+			sp.BirthYear = &y
+		}
+		out.Players = append(out.Players, sp)
+	}
+	return out, nil
 }
 
 // badPageError carries a limit or cursor error so handlers answer 400 instead of 500.

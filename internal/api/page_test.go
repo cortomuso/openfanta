@@ -81,14 +81,21 @@ func TestPaginateRejectsBadInput(t *testing.T) {
 	}
 }
 
-func TestPlayerStatusFromSquadEntry(t *testing.T) {
-	p := db.Player{Name: "Gone"}
-	role := "D"
-	left := player(p, &db.GetPlayerLatestSquadEntryRow{ClubName: "Home FC", Role: &role, Listed: false})
-	if left.Status != NoLongerListed || left.Club == nil || len(left.Roles) != 1 || left.Roles[0] != D {
-		t.Errorf("left = %+v", left)
+func TestPlayerFromClubHistory(t *testing.T) {
+	p := db.Player{Name: "Mover"}
+	d, c := "D", "C"
+	// Latest season first: the profile follows it, the history keeps both.
+	got := player(p, []db.PlayerClubHistoryRow{
+		{SeasonName: "2026/2027", ClubName: "New FC", Role: &c, Listed: false},
+		{SeasonName: "2025/2026", ClubName: "Old FC", Role: &d, Listed: true},
+	})
+	if got.Club == nil || got.Club.Name != "New FC" || got.Status != NoLongerListed || len(got.Roles) != 1 || got.Roles[0] != C {
+		t.Errorf("profile = %+v", got)
 	}
-	if nobody := player(p, nil); nobody.Status != Unknown || nobody.Club != nil || nobody.Roles == nil {
+	if len(got.ClubHistory) != 2 || got.ClubHistory[1].Club.Name != "Old FC" || got.ClubHistory[1].Status != Listed || got.ClubHistory[1].Roles[0] != D {
+		t.Errorf("history = %+v", got.ClubHistory)
+	}
+	if nobody := player(p, nil); nobody.Status != Unknown || nobody.Club != nil || nobody.Roles == nil || nobody.ClubHistory == nil {
 		t.Errorf("no squad entry = %+v", nobody)
 	}
 }

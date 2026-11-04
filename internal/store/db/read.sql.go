@@ -12,6 +12,85 @@ import (
 	"github.com/google/uuid"
 )
 
+const clubLatestSeason = `-- name: ClubLatestSeason :one
+SELECT s.id, s.name, c.id AS competition_id, c.name AS competition_name, c.country AS competition_country
+FROM player_seasons x
+JOIN seasons s ON s.id = x.season_id
+JOIN competitions c ON c.id = s.competition_id
+WHERE x.team_id = $1
+ORDER BY s.name DESC, s.id DESC
+LIMIT 1
+`
+
+type ClubLatestSeasonRow struct {
+	ID                 uuid.UUID
+	Name               string
+	CompetitionID      uuid.UUID
+	CompetitionName    string
+	CompetitionCountry string
+}
+
+// The latest season in which the club has a squad; no row for a club without one.
+func (q *Queries) ClubLatestSeason(ctx context.Context, teamID uuid.UUID) (ClubLatestSeasonRow, error) {
+	row := q.db.QueryRow(ctx, clubLatestSeason, teamID)
+	var i ClubLatestSeasonRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CompetitionID,
+		&i.CompetitionName,
+		&i.CompetitionCountry,
+	)
+	return i, err
+}
+
+const clubSquad = `-- name: ClubSquad :many
+SELECT p.id AS player_id, p.name AS player_name, p.birth_year, x.role, x.listed
+FROM player_seasons x
+JOIN players p ON p.id = x.player_id
+WHERE x.team_id = $1 AND x.season_id = $2
+ORDER BY p.name, p.id
+`
+
+type ClubSquadParams struct {
+	TeamID   uuid.UUID
+	SeasonID uuid.UUID
+}
+
+type ClubSquadRow struct {
+	PlayerID   uuid.UUID
+	PlayerName string
+	BirthYear  *int16
+	Role       *string
+	Listed     bool
+}
+
+func (q *Queries) ClubSquad(ctx context.Context, arg ClubSquadParams) ([]ClubSquadRow, error) {
+	rows, err := q.db.Query(ctx, clubSquad, arg.TeamID, arg.SeasonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClubSquadRow
+	for rows.Next() {
+		var i ClubSquadRow
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.PlayerName,
+			&i.BirthYear,
+			&i.Role,
+			&i.Listed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const fixtureRuns = `-- name: FixtureRuns :many
 SELECT r.id, r.settings_sha256, r.voto_source, r.voto_source_version, r.engine_version, r.input_hash,
        r.supersedes_run_id, r.reason, r.created_at,
@@ -132,6 +211,17 @@ func (q *Queries) FixtureScores(ctx context.Context, arg FixtureScoresParams) ([
 	return items, nil
 }
 
+const getClub = `-- name: GetClub :one
+SELECT id, name FROM teams WHERE id = $1
+`
+
+func (q *Queries) GetClub(ctx context.Context, id uuid.UUID) (Team, error) {
+	row := q.db.QueryRow(ctx, getClub, id)
+	var i Team
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
 const getFixture = `-- name: GetFixture :one
 SELECT f.id, f.kickoff, f.status, f.exception, m.number AS matchday, m.season_id,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
@@ -181,37 +271,6 @@ func (q *Queries) GetPlayer(ctx context.Context, id uuid.UUID) (Player, error) {
 	row := q.db.QueryRow(ctx, getPlayer, id)
 	var i Player
 	err := row.Scan(&i.ID, &i.Name, &i.BirthYear)
-	return i, err
-}
-
-const getPlayerLatestSquadEntry = `-- name: GetPlayerLatestSquadEntry :one
-SELECT x.team_id AS club_id, t.name AS club_name, x.role, x.listed
-FROM player_seasons x
-JOIN seasons s ON s.id = x.season_id
-JOIN teams t ON t.id = x.team_id
-WHERE x.player_id = $1
-ORDER BY s.name DESC, s.id DESC
-LIMIT 1
-`
-
-type GetPlayerLatestSquadEntryRow struct {
-	ClubID   uuid.UUID
-	ClubName string
-	Role     *string
-	Listed   bool
-}
-
-// The club, role and status of a player's latest season in the squads; no row for a player no
-// squad ever named.
-func (q *Queries) GetPlayerLatestSquadEntry(ctx context.Context, playerID uuid.UUID) (GetPlayerLatestSquadEntryRow, error) {
-	row := q.db.QueryRow(ctx, getPlayerLatestSquadEntry, playerID)
-	var i GetPlayerLatestSquadEntryRow
-	err := row.Scan(
-		&i.ClubID,
-		&i.ClubName,
-		&i.Role,
-		&i.Listed,
-	)
 	return i, err
 }
 
@@ -287,6 +346,31 @@ func (q *Queries) HasClosedMatchdayFrom(ctx context.Context, arg HasClosedMatchd
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listClubs = `-- name: ListClubs :many
+SELECT id, name FROM teams ORDER BY name, id
+`
+
+// Clubs are the teams of the competitions; one that never listed a squad still shows up.
+func (q *Queries) ListClubs(ctx context.Context) ([]Team, error) {
+	rows, err := q.db.Query(ctx, listClubs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Team
+	for rows.Next() {
+		var i Team
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSeasons = `-- name: ListSeasons :many
@@ -443,6 +527,51 @@ func (q *Queries) MatchdayScores(ctx context.Context, arg MatchdayScoresParams) 
 			&i.SettingsSha256,
 			&i.VotoSource,
 			&i.ComputedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const playerClubHistory = `-- name: PlayerClubHistory :many
+SELECT x.season_id, s.name AS season_name, x.team_id AS club_id, t.name AS club_name, x.role, x.listed
+FROM player_seasons x
+JOIN seasons s ON s.id = x.season_id
+JOIN teams t ON t.id = x.team_id
+WHERE x.player_id = $1
+ORDER BY s.name DESC, s.id DESC
+`
+
+type PlayerClubHistoryRow struct {
+	SeasonID   uuid.UUID
+	SeasonName string
+	ClubID     uuid.UUID
+	ClubName   string
+	Role       *string
+	Listed     bool
+}
+
+func (q *Queries) PlayerClubHistory(ctx context.Context, playerID uuid.UUID) ([]PlayerClubHistoryRow, error) {
+	rows, err := q.db.Query(ctx, playerClubHistory, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PlayerClubHistoryRow
+	for rows.Next() {
+		var i PlayerClubHistoryRow
+		if err := rows.Scan(
+			&i.SeasonID,
+			&i.SeasonName,
+			&i.ClubID,
+			&i.ClubName,
+			&i.Role,
+			&i.Listed,
 		); err != nil {
 			return nil, err
 		}

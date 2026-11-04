@@ -273,6 +273,66 @@ paths:
         "404":
           $ref: "#/components/responses/Problem"
 
+  /v1/clubs:
+    get:
+      tags: [catalog]
+      operationId: listClubs
+      summary: List clubs
+      description: Clubs are the teams of the ingested competitions, ordered by name.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Clubs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [clubs]
+                properties:
+                  clubs:
+                    type: array
+                    items: { $ref: "#/components/schemas/Ref" }
+                  next_cursor: { $ref: "#/components/schemas/NextCursor" }
+        "400":
+          $ref: "#/components/responses/Problem"
+  /v1/clubs/{clubId}/players:
+    get:
+      tags: [catalog]
+      operationId: listClubPlayers
+      summary: A club's squad in a season
+      description: |
+        The players the club lists in the season, ordered by name. Players who have left the squad
+        are included and flagged `no_longer_listed`, so rules for released players can apply.
+        Without `season` the club's latest season with a squad is used.
+      parameters:
+        - { name: clubId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: season, in: query, description: A season id., schema: { type: string, format: uuid } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: The squad. `season` is null for a club that has no squad yet.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [club, season, players]
+                properties:
+                  club: { $ref: "#/components/schemas/Ref" }
+                  season:
+                    allOf: [{ $ref: "#/components/schemas/Season" }]
+                    nullable: true
+                  players:
+                    type: array
+                    items: { $ref: "#/components/schemas/SquadPlayer" }
+                  next_cursor: { $ref: "#/components/schemas/NextCursor" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+
 components:
   parameters:
     SeasonId:
@@ -370,9 +430,41 @@ components:
       type: string
       enum: [P, D, C, A]
       description: The role catalog, as listed on a listone. P goalkeeper, D defender, C midfielder, A attacker.
+    PlayerStatus:
+      type: string
+      enum: [listed, no_longer_listed, unknown]
+      description: |
+        `listed` while the latest squad entry is open, `no_longer_listed` once the player has
+        left the club's squad (rules for released players apply), `unknown` for a player no
+        squad has named.
+    SquadPlayer:
+      type: object
+      required: [player, roles, birth_year, status]
+      properties:
+        player: { $ref: "#/components/schemas/Ref" }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/PlayerRole" }
+        birth_year: { type: integer, nullable: true }
+        status: { $ref: "#/components/schemas/PlayerStatus" }
+    ClubSeason:
+      type: object
+      required: [season, club, roles, status]
+      properties:
+        season:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string, example: 2026/2027 }
+        club: { $ref: "#/components/schemas/Ref" }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/PlayerRole" }
+        status: { $ref: "#/components/schemas/PlayerStatus" }
     Player:
       type: object
-      required: [id, name, roles, club, birth_year, status]
+      required: [id, name, roles, club, club_history, birth_year, status]
       properties:
         id: { type: string }
         name: { type: string }
@@ -391,13 +483,11 @@ components:
           type: integer
           nullable: true
           description: Null when the provider does not give a birth date.
-        status:
-          type: string
-          enum: [listed, no_longer_listed, unknown]
-          description: |
-            `listed` while the latest squad entry is open, `no_longer_listed` once the player has
-            left the club's squad (rules for released players apply), `unknown` for a player no
-            squad has named.
+        status: { $ref: "#/components/schemas/PlayerStatus" }
+        club_history:
+          type: array
+          items: { $ref: "#/components/schemas/ClubSeason" }
+          description: The club the player was listed with in each season, latest first. Empty when no squad named the player.
     Season:
       type: object
       required: [id, name, competition]
