@@ -114,7 +114,7 @@ var periods = map[string]domain.Period{
 	"HT":               domain.PeriodHalfTime,
 	"INPLAY_2ND_HALF":  domain.PeriodSecondHalf,
 	"EXTRA_TIME_BREAK": domain.PeriodExtraTime, "INPLAY_ET": domain.PeriodExtraTime,
-	"INPLAY_ET_2ND_HALF": domain.PeriodExtraTime, "BREAK": domain.PeriodExtraTime,
+	"INPLAY_ET_SECOND_HALF": domain.PeriodExtraTime, "BREAK": domain.PeriodExtraTime,
 	"PEN_BREAK": domain.PeriodPenalties, "INPLAY_PENALTIES": domain.PeriodPenalties,
 	"FT": domain.PeriodFinished, "AET": domain.PeriodFinished, "FT_PEN": domain.PeriodFinished,
 }
@@ -149,9 +149,10 @@ func (c *Client) ParseFixture(r provider.Raw) (provider.Fixture, error) { return
 // ParseSeason parses GET /seasons/{id}?include=league.country.
 func ParseSeason(r provider.Raw) (provider.Season, error) {
 	s, err := decode[struct {
-		ID     id     `json:"id"`
-		Name   string `json:"name"`
-		League struct {
+		ID      id     `json:"id"`
+		Name    string `json:"name"`
+		Current bool   `json:"is_current"`
+		League  struct {
 			ID      id     `json:"id"`
 			Name    string `json:"name"`
 			Country struct {
@@ -168,6 +169,7 @@ func ParseSeason(r provider.Raw) (provider.Season, error) {
 	return provider.Season{
 		Ref: s.ID.String(), Name: s.Name,
 		CompetitionRef: s.League.ID.String(), CompetitionName: s.League.Name, CompetitionCountry: s.League.Country.Name,
+		Current: s.Current,
 	}, nil
 }
 

@@ -37,7 +37,7 @@ func TestParseSeason(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := provider.Season{Ref: "777", Name: "2026/2027", CompetitionRef: "384", CompetitionName: "Serie A", CompetitionCountry: "Italy"}
+	want := provider.Season{Ref: "777", Name: "2026/2027", CompetitionRef: "384", CompetitionName: "Serie A", CompetitionCountry: "Italy", Current: true}
 	if s != want {
 		t.Errorf("season = %+v", s)
 	}
@@ -453,9 +453,7 @@ func TestParseFixtureExceptions(t *testing.T) {
 }
 
 func TestParseSquad(t *testing.T) {
-	r := raw(t, "squad_777_100.json")
-	r.FetchedAt = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
-	sq, err := ParseSquad(r)
+	sq, err := ParseSquad(raw(t, "squad_777_100.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -467,7 +465,7 @@ func TestParseSquad(t *testing.T) {
 		t.Fatalf("members = %d", len(by))
 	}
 	gk := by["1001"]
-	if gk.Name != "Home Keeper" || gk.Role != d.CatalogGoalkeeper || gk.BirthYear == nil || *gk.BirthYear != 1998 || !gk.Listed {
+	if gk.Name != "Home Keeper" || gk.Role != d.CatalogGoalkeeper || gk.BirthYear == nil || *gk.BirthYear != 1998 {
 		t.Errorf("keeper = %+v", gk)
 	}
 	for ref, want := range map[string]d.CatalogRole{"1002": "A", "1003": "C", "1005": "D"} {
@@ -475,16 +473,33 @@ func TestParseSquad(t *testing.T) {
 			t.Errorf("%s role = %q, want %q", ref, by[ref].Role, want)
 		}
 	}
-	if m := by["1004"]; m.Role != "" || m.BirthYear != nil || !m.Listed {
+	if m := by["1004"]; m.Role != "" || m.BirthYear != nil {
 		t.Errorf("player without position and birth date = %+v (missing data must stay empty)", m)
-	}
-	if by["1099"].Listed {
-		t.Errorf("player whose squad entry ended in January is still listed: %+v", by["1099"])
 	}
 }
 
-func TestParseSquadRejectsBadEndDate(t *testing.T) {
-	_, err := ParseSquad(provider.Raw{Key: "k", Body: []byte(`{"data":[{"player_id":1,"end":"soon"}]}`)})
+func TestParseCurrentSquad(t *testing.T) {
+	sq, err := ParseCurrentSquad(raw(t, "current_squad_100.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]provider.CurrentMember{}
+	for _, m := range sq.Members {
+		by[m.PlayerRef] = m
+	}
+	if len(by) != 5 || by["1099"].PlayerRef != "" {
+		t.Fatalf("members = %+v", by)
+	}
+	if u := by["1001"].Until; u == nil || u.Format("2006-01-02") != "2028-06-30" {
+		t.Errorf("contract end = %v", u)
+	}
+	if by["1002"].Until != nil {
+		t.Errorf("no end given, got %v", by["1002"].Until)
+	}
+}
+
+func TestParseCurrentSquadRejectsBadEndDate(t *testing.T) {
+	_, err := ParseCurrentSquad(provider.Raw{Key: "k", Body: []byte(`{"data":[{"player_id":1,"end":"soon"}]}`)})
 	if !errors.Is(err, ErrParse) {
 		t.Fatalf("err = %v", err)
 	}
@@ -522,7 +537,8 @@ func TestParseFixtureScoreAndPeriod(t *testing.T) {
 
 	for state, want := range map[string]d.Period{
 		"NS": d.PeriodNotStarted, "INPLAY_1ST_HALF": d.PeriodFirstHalf, "HT": d.PeriodHalfTime,
-		"INPLAY_2ND_HALF": d.PeriodSecondHalf, "INPLAY_ET": d.PeriodExtraTime, "PEN_BREAK": d.PeriodPenalties,
+		"INPLAY_2ND_HALF": d.PeriodSecondHalf, "INPLAY_ET": d.PeriodExtraTime, "INPLAY_ET_SECOND_HALF": d.PeriodExtraTime, "EXTRA_TIME_BREAK": d.PeriodExtraTime, "BREAK": d.PeriodExtraTime,
+		"AWAITING_UPDATES": d.PeriodNone, "DELAYED": d.PeriodNone, "WO": d.PeriodNone, "AWARDED": d.PeriodNone, "PENDING": d.PeriodNone, "INPLAY_PENALTIES": d.PeriodPenalties, "PEN_BREAK": d.PeriodPenalties,
 		"FT": d.PeriodFinished, "AET": d.PeriodFinished, "FT_PEN": d.PeriodFinished,
 		"POSTPONED": d.PeriodNone, "SUSPENDED": d.PeriodNone, "CANCELLED": d.PeriodNone, "SOMETHING_NEW": d.PeriodNone,
 	} {

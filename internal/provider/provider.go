@@ -40,9 +40,16 @@ type Provider interface {
 	ParseFixture(r Raw) (Fixture, error)
 
 	// FetchSquad fetches the players a team lists in a season: who they are,
-	// their role, birth date and whether they are still with the team.
+	// their role and birth date. A player who moved during the season can be in
+	// the squads of two teams.
 	FetchSquad(ctx context.Context, seasonRef, teamRef string) (Raw, error)
 	ParseSquad(r Raw) (Squad, error)
+
+	// FetchCurrentSquad fetches the players a team has now, which tells where a
+	// player who moved plays today and who has left. It only describes the
+	// current season.
+	FetchCurrentSquad(ctx context.Context, teamRef string) (Raw, error)
+	ParseCurrentSquad(r Raw) (CurrentSquad, error)
 }
 
 // Squad is the list of players a team has in one season.
@@ -59,8 +66,19 @@ type SquadMember struct {
 	// provider gives none.
 	Role      domain.CatalogRole
 	BirthYear *int
-	// Listed is false once the player has left the team.
-	Listed bool
+}
+
+// CurrentSquad is the list of players a team has now.
+type CurrentSquad struct {
+	Members []CurrentMember
+}
+
+// CurrentMember is one player of the current squad.
+type CurrentMember struct {
+	PlayerRef string
+	// Until is when the player's contract with the team ends; nil when the
+	// provider gives no end. A player whose contract has ended is not listed.
+	Until *time.Time
 }
 
 // Season describes a season of a competition.
@@ -70,6 +88,9 @@ type Season struct {
 	CompetitionRef     string
 	CompetitionName    string
 	CompetitionCountry string
+	// Current is true while this is the competition's running season; only then
+	// does a team's current squad describe it.
+	Current bool
 }
 
 // Schedule maps matchday numbers to fixture refs.

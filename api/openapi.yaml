@@ -509,9 +509,9 @@ components:
       type: string
       enum: [listed, no_longer_listed, unknown]
       description: |
-        `listed` while the latest squad entry is open, `no_longer_listed` once the player has
-        left the club's squad (rules for released players apply), `unknown` for a player no
-        squad has named.
+        `listed` while a team's current squad has the player under contract, `no_longer_listed` once
+        no current squad has them (rules for released players apply), `unknown` for a player no
+        squad has named. For a finished season every player of its squads is `listed`.
     SquadPlayer:
       type: object
       required: [player, roles, birth_year, status]

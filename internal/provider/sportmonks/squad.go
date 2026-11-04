@@ -18,14 +18,12 @@ var catalogRoles = map[int]domain.CatalogRole{
 	positionAttacker:   domain.CatalogAttacker,
 }
 
-// ParseSquad parses GET /squads/seasons/{season}/teams/{team}?include=player.
-// A member is listed while the squad entry has no end date or its end date has
-// not passed at the time of the payload.
+// ParseSquad parses GET /squads/seasons/{season}/teams/{team}?include=player. Its rows carry no
+// start or end date, so they say who was in the squad during the season, not who still is.
 func ParseSquad(r provider.Raw) (provider.Squad, error) {
 	rows, err := decode[[]struct {
-		PlayerID   id      `json:"player_id"`
-		PositionID *int    `json:"position_id"`
-		End        *string `json:"end"`
+		PlayerID   id   `json:"player_id"`
+		PositionID *int `json:"position_id"`
 		Player     *struct {
 			Name        string  `json:"name"`
 			DisplayName string  `json:"display_name"`
@@ -41,16 +39,9 @@ func ParseSquad(r provider.Raw) (provider.Squad, error) {
 		if ref == "" {
 			continue
 		}
-		m := provider.SquadMember{PlayerRef: ref, Listed: true}
+		m := provider.SquadMember{PlayerRef: ref}
 		if row.PositionID != nil {
 			m.Role = catalogRoles[*row.PositionID]
-		}
-		if row.End != nil && *row.End != "" {
-			end, err := time.Parse(time.DateOnly, *row.End)
-			if err != nil {
-				return provider.Squad{}, fmt.Errorf("%w (%s): end %q: %w", ErrParse, r.Key, *row.End, err)
-			}
-			m.Listed = !end.Before(r.FetchedAt.Truncate(24 * time.Hour))
 		}
 		if p := row.Player; p != nil {
 			m.Name = p.DisplayName
@@ -68,5 +59,38 @@ func ParseSquad(r provider.Raw) (provider.Squad, error) {
 	return out, nil
 }
 
+// ParseCurrentSquad parses GET /squads/teams/{team}. `end` is the end of the player's contract.
+func ParseCurrentSquad(r provider.Raw) (provider.CurrentSquad, error) {
+	rows, err := decode[[]struct {
+		PlayerID id      `json:"player_id"`
+		End      *string `json:"end"`
+	}](r)
+	if err != nil {
+		return provider.CurrentSquad{}, err
+	}
+	var out provider.CurrentSquad
+	for _, row := range rows {
+		ref := row.PlayerID.String()
+		if ref == "" {
+			continue
+		}
+		m := provider.CurrentMember{PlayerRef: ref}
+		if row.End != nil && *row.End != "" {
+			end, err := time.Parse(time.DateOnly, *row.End)
+			if err != nil {
+				return provider.CurrentSquad{}, fmt.Errorf("%w (%s): end %q: %w", ErrParse, r.Key, *row.End, err)
+			}
+			m.Until = &end
+		}
+		out.Members = append(out.Members, m)
+	}
+	return out, nil
+}
+
 // ParseSquad implements provider.Provider.
 func (c *Client) ParseSquad(r provider.Raw) (provider.Squad, error) { return ParseSquad(r) }
+
+// ParseCurrentSquad implements provider.Provider.
+func (c *Client) ParseCurrentSquad(r provider.Raw) (provider.CurrentSquad, error) {
+	return ParseCurrentSquad(r)
+}

@@ -43,6 +43,8 @@ func New(t testing.TB) (*Upstream, *httptest.Server) {
 
 			"/squads/seasons/777/teams/100": Fixture(t, "squad_777_100.json"),
 			"/squads/seasons/777/teams/200": Fixture(t, "squad_777_200.json"),
+			"/squads/teams/100":             Fixture(t, "current_squad_100.json"),
+			"/squads/teams/200":             Fixture(t, "current_squad_200.json"),
 		},
 		requests: map[string]int{},
 	}

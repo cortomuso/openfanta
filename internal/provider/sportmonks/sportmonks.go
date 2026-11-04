@@ -68,6 +68,11 @@ func (c *Client) FetchSquad(ctx context.Context, seasonRef, teamRef string) (pro
 	return c.get(ctx, "squads/seasons/"+url.PathEscape(seasonRef)+"/teams/"+url.PathEscape(teamRef), url.Values{"include": {"player"}})
 }
 
+// FetchCurrentSquad implements provider.Provider.
+func (c *Client) FetchCurrentSquad(ctx context.Context, teamRef string) (provider.Raw, error) {
+	return c.get(ctx, "squads/teams/"+url.PathEscape(teamRef), nil)
+}
+
 func (c *Client) get(ctx context.Context, path string, query url.Values) (provider.Raw, error) {
 	u := c.BaseURL + "/" + path
 	if len(query) > 0 {

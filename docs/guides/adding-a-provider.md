@@ -49,8 +49,11 @@ and never guesses it.
 - `Role` is the P/D/C/A catalog (`domain.CatalogRole`): map the provider's position to it.
   Sportmonks gives one position per player (24 goalkeeper, 25 defender, 26 midfielder, 27
   attacker), so every player has at most one role. Dual roles need another source.
-- `Listed` is false once the player has left the team (Sportmonks: the squad entry has an `end`
-  date in the past). That is what the API reports as `no_longer_listed`.
+- Who still plays for the team comes from `ParseCurrentSquad` (`FetchCurrentSquad`): the players a
+  team has now, with the end of their contract when known. The season squad has no dates and can
+  list a player who moved under two teams (Sportmonks does), so for the running season
+  (`Season.Current`) ingest takes a player's club from the team whose current squad has them and
+  reports `no_longer_listed` for players no current squad has or whose contract is over.
 - `BirthYear` is the year of the provider's birth date.
 
 Squads are stored per season, so they are also the club history. Run `openfanta squads --season S`
