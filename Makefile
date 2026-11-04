@@ -4,7 +4,7 @@ PKGS      := ./...
 CORE_PKGS := ./internal/domain/... ./internal/settings/... ./internal/timeline/... ./internal/engine/... ./internal/realmatch/...
 CORE_MIN_COVERAGE := 95
 
-.PHONY: docs-dev docs-build all build test test-all test-core cover lint fmt-check gen run db-up db-down pg-start pg-stop
+.PHONY: docs-dev docs-build all build test test-all test-core cover lint fmt-check gen run db-up db-down pg-start pg-stop secrets
 
 all: lint test build
 
@@ -59,3 +59,6 @@ docs-dev:
 
 docs-build:
 	cd website && npm ci && npm run build
+
+secrets:
+	gitleaks git --redact --config .gitleaks.toml .

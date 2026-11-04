@@ -1,0 +1,15 @@
+# Sportmonks tokens are plain alphanumerics with no prefix, so the default rules cannot
+# recognise them; match them by the name they are assigned to instead.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "openfanta-api-token"
+description = "Sportmonks or other API token assigned to a token variable or api_token parameter"
+regex = '''(?i)(?:OPENFANTA_\w*TOKEN|SPORTMONKS\w*TOKEN|api_token)["']?\s*[:=]\s*["']?([A-Za-z0-9]{20,})'''
+secretGroup = 1
+keywords = ["token"]
+
+[allowlist]
+description = "Documentation placeholders"
+regexes = ['''(?i)(?:x{20,}|your[-_]?token|example)''']
