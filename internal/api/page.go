@@ -71,3 +71,30 @@ func paginate[T any](rows []T, key func(T) string, limit *int, cursor *string) (
 	page = rows[:*limit]
 	return page, encodeCursor(key(page[len(page)-1])), nil
 }
+
+// DefaultPageSize is the page of a catalog list that is paged in SQL, where a request without
+// `limit` must not read the whole table.
+const DefaultPageSize = 50
+
+// keysetSep separates the sort value from the id inside a keyset cursor. Names never hold NUL.
+const keysetSep = "\x00"
+
+func encodeKeyset(sortValue, id string) string { return encodeCursor(sortValue + keysetSep + id) }
+
+// decodeKeyset returns the sort value and id a keyset cursor names.
+func decodeKeyset(c string) (sortValue, id string, err error) {
+	key, err := decodeCursor(c)
+	if err != nil {
+		return "", "", err
+	}
+	sortValue, id, ok := strings.Cut(key, keysetSep)
+	if !ok || id == "" {
+		return "", "", errBadCursor
+	}
+	return sortValue, id, nil
+}
+
+// likePattern turns text into a case-insensitive "contains" pattern for ILIKE ... ESCAPE '\'.
+func likePattern(text string) string {
+	return "%" + strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(text) + "%"
+}

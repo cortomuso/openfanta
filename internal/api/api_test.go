@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -516,5 +517,130 @@ func TestPlayerClubHistory(t *testing.T) {
 	if len(p.ClubHistory) != 1 || p.ClubHistory[0].Season.Name != "2026/2027" || p.ClubHistory[0].Club.Name != "Home FC" ||
 		p.ClubHistory[0].Roles[0] != api.A || p.Club == nil || p.Club.Id != p.ClubHistory[0].Club.Id {
 		t.Errorf("history = %+v", p.ClubHistory)
+	}
+}
+
+type playerPage struct {
+	Players    []api.PlayerSummary
+	NextCursor *string `json:"next_cursor"`
+}
+
+func (f *fixture) players(query string) []string {
+	f.t.Helper()
+	var page playerPage
+	f.get("/v1/players?"+query, 200, &page)
+	names := make([]string, len(page.Players))
+	for i, p := range page.Players {
+		names[i] = p.Name
+	}
+	return names
+}
+
+func TestPlayersListFiltersAndOrder(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	season := seasons.Seasons[0].Id
+	var clubs struct{ Clubs []api.Ref }
+	f.get("/v1/clubs", 200, &clubs)
+	home := clubs.Clubs[1].Id
+
+	all := f.players("")
+	if len(all) != 15 || !sort.StringsAreSorted(all) {
+		t.Fatalf("all players (%d), want 15 sorted by name: %v", len(all), all)
+	}
+	eq := func(what string, got []string, want ...string) {
+		t.Helper()
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("%s = %v, want %v", what, got, want)
+		}
+	}
+	eq("q=striker", f.players("q=striker"), "Away Striker", "Home Striker")
+	eq("q=HOME KEEP", f.players("q=HOME%20KEEP"), "Home Keeper")
+	eq("q=% is literal", f.players("q=%25"))
+	eq("role=P", f.players("role=P"), "Away Keeper", "Home Keeper")
+	eq("club+role", f.players("club="+home+"&role=D"), "Home Defender", "Home Departed")
+	eq("born from 2000", f.players("birth_year_from=2000"), "Away Striker", "Home Defender", "Home Striker")
+	eq("born to 1996", f.players("birth_year_to=1996"), "Away Keeper", "Home Departed", "Home Winger")
+	eq("born 1998..2000", f.players("birth_year_from=1998&birth_year_to=2000"), "Away Striker", "Home Keeper")
+	if n := len(f.players("season=" + season)); n != 8 {
+		t.Errorf("season filter keeps %d players, want the 8 in squads", n)
+	}
+	if n := len(f.players("season=0190a0a0-0000-7000-8000-000000000009")); n != 0 {
+		t.Errorf("unknown season keeps %d players", n)
+	}
+
+	// Home Super Sub played but no squad lists them, so a role filter cannot match them.
+	eq("Home attackers", f.players("q=Home&role=A"), "Home Striker")
+
+	for _, p := range f.playersFull("q=Home%20Departed") {
+		if p.Status != api.NoLongerListed || p.Club == nil || p.Club.Name != "Home FC" {
+			t.Errorf("Home Departed = %+v", p)
+		}
+	}
+	for _, p := range f.playersFull("q=Away%20Defender") {
+		if p.Status != api.Unknown || p.Club != nil || len(p.Roles) != 0 {
+			t.Errorf("a player no squad named = %+v", p)
+		}
+	}
+}
+
+func (f *fixture) playersFull(query string) []api.PlayerSummary {
+	f.t.Helper()
+	var page playerPage
+	f.get("/v1/players?"+query, 200, &page)
+	return page.Players
+}
+
+func TestPlayersListPagesInSQL(t *testing.T) {
+	f := setup(t)
+	want := f.players("")
+	for _, limit := range []int{1, 4, 5, 15, 16} {
+		var got []string
+		cursor := ""
+		for i := 0; ; i++ {
+			if i > 20 {
+				t.Fatalf("limit %d: paging does not end", limit)
+			}
+			q := "limit=" + strconv.Itoa(limit)
+			if cursor != "" {
+				q += "&cursor=" + cursor
+			}
+			var page playerPage
+			f.get("/v1/players?"+q, 200, &page)
+			if len(page.Players) > limit {
+				t.Fatalf("limit %d: page of %d", limit, len(page.Players))
+			}
+			for _, p := range page.Players {
+				got = append(got, p.Name)
+			}
+			if page.NextCursor == nil {
+				break
+			}
+			cursor = *page.NextCursor
+		}
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("limit %d walks %v, want %v", limit, got, want)
+		}
+	}
+	// 15 players, limit 5: an exact multiple ends without an empty last page.
+	var page playerPage
+	f.get("/v1/players?limit=15", 200, &page)
+	if page.NextCursor != nil || len(page.Players) != 15 {
+		t.Errorf("limit=15: %d players, next=%v", len(page.Players), page.NextCursor)
+	}
+}
+
+func TestPlayersListErrors(t *testing.T) {
+	f := setup(t)
+	for _, q := range []string{
+		"limit=0", "limit=201", "cursor=garbage", "cursor=v1.bm9wZQ", "role=X",
+		"birth_year_from=2001&birth_year_to=2000", "club=nope", "season=nope", "birth_year_from=abc",
+	} {
+		var p api.Problem
+		rec := f.get("/v1/players?"+q, 400, &p)
+		if rec.Header().Get("Content-Type") != "application/problem+json" || p.Status != 400 {
+			t.Errorf("%s: %s %+v", q, rec.Header().Get("Content-Type"), p)
+		}
 	}
 }

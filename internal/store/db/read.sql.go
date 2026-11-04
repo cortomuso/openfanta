@@ -373,6 +373,88 @@ func (q *Queries) ListClubs(ctx context.Context) ([]Team, error) {
 	return items, nil
 }
 
+const listPlayers = `-- name: ListPlayers :many
+SELECT p.id, p.name, p.birth_year, ps.team_id AS club_id, t.name AS club_name, ps.role, ps.listed
+FROM players p
+LEFT JOIN player_seasons ps ON ps.player_id = p.id AND ps.season_id = COALESCE(
+    $1::uuid,
+    (SELECT x.season_id FROM player_seasons x JOIN seasons s ON s.id = x.season_id
+     WHERE x.player_id = p.id ORDER BY s.name DESC, s.id DESC LIMIT 1))
+LEFT JOIN teams t ON t.id = ps.team_id
+WHERE ($2::text IS NULL OR p.name ILIKE $2::text ESCAPE '\')
+  AND ($3::text IS NULL OR ps.role = $3::text)
+  AND ($4::uuid IS NULL OR ps.team_id = $4::uuid)
+  AND ($1::uuid IS NULL OR ps.player_id IS NOT NULL)
+  AND ($5::int IS NULL OR p.birth_year >= $5::int)
+  AND ($6::int IS NULL OR p.birth_year <= $6::int)
+  AND ($7::text IS NULL OR (p.name, p.id) > ($7::text, $8::uuid))
+ORDER BY p.name, p.id
+LIMIT $9::int
+`
+
+type ListPlayersParams struct {
+	SeasonID    *uuid.UUID
+	NamePattern *string
+	Role        *string
+	ClubID      *uuid.UUID
+	BirthFrom   *int32
+	BirthTo     *int32
+	AfterName   *string
+	AfterID     *uuid.UUID
+	RowLimit    int32
+}
+
+type ListPlayersRow struct {
+	ID        uuid.UUID
+	Name      string
+	BirthYear *int16
+	ClubID    *uuid.UUID
+	ClubName  *string
+	Role      *string
+	Listed    *bool
+}
+
+// Players with the club, role and status of one season: the requested one, else each player's
+// latest. A requested season also keeps only players listed in it. Keyset order (name, id): the
+// after_* pair is the last row of the previous page.
+func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]ListPlayersRow, error) {
+	rows, err := q.db.Query(ctx, listPlayers,
+		arg.SeasonID,
+		arg.NamePattern,
+		arg.Role,
+		arg.ClubID,
+		arg.BirthFrom,
+		arg.BirthTo,
+		arg.AfterName,
+		arg.AfterID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlayersRow
+	for rows.Next() {
+		var i ListPlayersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.BirthYear,
+			&i.ClubID,
+			&i.ClubName,
+			&i.Role,
+			&i.Listed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSeasons = `-- name: ListSeasons :many
 SELECT s.id, s.name, c.id AS competition_id, c.name AS competition_name, c.country AS competition_country
 FROM seasons s JOIN competitions c ON c.id = s.competition_id

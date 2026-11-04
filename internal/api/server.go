@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/openfanta/openfanta/internal/domain"
@@ -341,6 +342,79 @@ func player(p db.Player, history []db.PlayerClubHistoryRow) Player {
 		out.Status = out.ClubHistory[0].Status
 	}
 	return out
+}
+
+// ListPlayers implements StrictServerInterface.
+func (s *Server) ListPlayers(ctx context.Context, req ListPlayersRequestObject) (ListPlayersResponseObject, error) {
+	bad := func(err error) (ListPlayersResponseObject, error) {
+		return ListPlayers400ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(badRequest(err))}, nil
+	}
+	pr := req.Params
+	limit := DefaultPageSize
+	if pr.Limit != nil {
+		limit = *pr.Limit
+	}
+	if limit < 1 || limit > MaxLimit {
+		return bad(fmt.Errorf("limit must be between 1 and %d", MaxLimit))
+	}
+	if pr.BirthYearFrom != nil && pr.BirthYearTo != nil && *pr.BirthYearFrom > *pr.BirthYearTo {
+		return bad(errors.New("birth_year_from is after birth_year_to"))
+	}
+	arg := db.ListPlayersParams{RowLimit: int32(limit) + 1}
+	if pr.Q != nil && *pr.Q != "" {
+		p := likePattern(*pr.Q)
+		arg.NamePattern = &p
+	}
+	if pr.Role != nil {
+		if !domain.CatalogRole(*pr.Role).Valid() {
+			return bad(fmt.Errorf("role %q is not one of P, D, C, A", *pr.Role))
+		}
+		r := string(*pr.Role)
+		arg.Role = &r
+	}
+	arg.ClubID, arg.SeasonID = pr.Club, pr.Season
+	if pr.BirthYearFrom != nil {
+		v := int32(*pr.BirthYearFrom)
+		arg.BirthFrom = &v
+	}
+	if pr.BirthYearTo != nil {
+		v := int32(*pr.BirthYearTo)
+		arg.BirthTo = &v
+	}
+	if pr.Cursor != nil && *pr.Cursor != "" {
+		name, idText, err := decodeKeyset(*pr.Cursor)
+		id, perr := uuid.Parse(idText)
+		if err != nil || perr != nil {
+			return bad(errBadCursor)
+		}
+		arg.AfterName, arg.AfterID = &name, &id
+	}
+	rows, err := s.q.ListPlayers(ctx, arg)
+	if err != nil {
+		return nil, err
+	}
+	out := ListPlayers200JSONResponse{Players: make([]PlayerSummary, 0, len(rows))}
+	if len(rows) > limit {
+		rows = rows[:limit]
+		last := rows[limit-1]
+		c := encodeKeyset(last.Name, last.ID.String())
+		out.NextCursor = &c
+	}
+	for _, r := range rows {
+		ps := PlayerSummary{Id: r.ID.String(), Name: r.Name, Roles: squadRoles(r.Role), Status: Unknown}
+		if r.BirthYear != nil {
+			y := int(*r.BirthYear)
+			ps.BirthYear = &y
+		}
+		if r.ClubID != nil {
+			ps.Club = &Ref{Id: r.ClubID.String(), Name: *r.ClubName}
+		}
+		if r.Listed != nil {
+			ps.Status = squadStatus(*r.Listed)
+		}
+		out.Players = append(out.Players, ps)
+	}
+	return out, nil
 }
 
 // ListClubs implements StrictServerInterface.

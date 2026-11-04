@@ -15,6 +15,7 @@ GET /v1/seasons/{seasonId}/matchdays/{n}/scores?voto_source=provider-rating
 GET /v1/seasons/{seasonId}/players/{playerId}/scores
 GET /v1/fixtures/{fixtureId}/scores
 GET /v1/fixtures/{fixtureId}/runs
+GET /v1/players?q=&role=&club=&season=&birth_year_from=&birth_year_to=
 GET /v1/players/{playerId}   roles (P/D/C/A), club, birth_year, status
 GET /v1/clubs
 GET /v1/clubs/{clubId}/players?season=

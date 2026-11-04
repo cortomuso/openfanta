@@ -273,6 +273,45 @@ paths:
         "404":
           $ref: "#/components/responses/Problem"
 
+  /v1/players:
+    get:
+      tags: [catalog]
+      operationId: listPlayers
+      summary: Search and browse players
+      description: |
+        Ordered by name. Club, role and status are those of the season in `season`, else of each
+        player's latest season. `role` and `club` therefore match the squad entry of that season,
+        and `season` keeps only players listed in it. Players no squad has named are only found
+        without `role`, `club` and `season`. A page is 50 players unless `limit` says otherwise.
+        Sorting by statistics comes with the season statistics (#149).
+      parameters:
+        - { name: q, in: query, description: Case-insensitive text in the name., schema: { type: string, minLength: 1, maxLength: 100 } }
+        - { name: role, in: query, schema: { $ref: "#/components/schemas/PlayerRole" } }
+        - { name: club, in: query, description: A club id., schema: { type: string, format: uuid } }
+        - { name: season, in: query, description: A season id., schema: { type: string, format: uuid } }
+        - { name: birth_year_from, in: query, schema: { type: integer, minimum: 1900, maximum: 2100 } }
+        - { name: birth_year_to, in: query, schema: { type: integer, minimum: 1900, maximum: 2100 } }
+        - { name: sort, in: query, schema: { type: string, enum: [name], default: name } }
+        - name: limit
+          in: query
+          description: Page size, 1 to 200; 50 when omitted.
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of players.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [players]
+                properties:
+                  players:
+                    type: array
+                    items: { $ref: "#/components/schemas/PlayerSummary" }
+                  next_cursor: { $ref: "#/components/schemas/NextCursor" }
+        "400":
+          $ref: "#/components/responses/Problem"
   /v1/clubs:
     get:
       tags: [catalog]
@@ -445,6 +484,20 @@ components:
         roles:
           type: array
           items: { $ref: "#/components/schemas/PlayerRole" }
+        birth_year: { type: integer, nullable: true }
+        status: { $ref: "#/components/schemas/PlayerStatus" }
+    PlayerSummary:
+      type: object
+      required: [id, name, roles, club, birth_year, status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/PlayerRole" }
+        club:
+          allOf: [{ $ref: "#/components/schemas/Ref" }]
+          nullable: true
         birth_year: { type: integer, nullable: true }
         status: { $ref: "#/components/schemas/PlayerStatus" }
     ClubSeason:
