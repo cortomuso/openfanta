@@ -223,7 +223,7 @@ func (q *Queries) GetClub(ctx context.Context, id uuid.UUID) (Team, error) {
 }
 
 const getFixture = `-- name: GetFixture :one
-SELECT f.id, f.kickoff, f.status, f.exception, m.number AS matchday, m.season_id,
+SELECT f.id, f.kickoff, f.status, f.exception, f.home_score, f.away_score, f.period, m.number AS matchday, m.season_id,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
 FROM fixtures f
 JOIN matchdays m ON m.id = f.matchday_id
@@ -237,6 +237,9 @@ type GetFixtureRow struct {
 	Kickoff   *time.Time
 	Status    string
 	Exception string
+	HomeScore *int16
+	AwayScore *int16
+	Period    string
 	Matchday  int32
 	SeasonID  uuid.UUID
 	HomeID    uuid.UUID
@@ -253,6 +256,9 @@ func (q *Queries) GetFixture(ctx context.Context, id uuid.UUID) (GetFixtureRow, 
 		&i.Kickoff,
 		&i.Status,
 		&i.Exception,
+		&i.HomeScore,
+		&i.AwayScore,
+		&i.Period,
 		&i.Matchday,
 		&i.SeasonID,
 		&i.HomeID,
@@ -859,7 +865,7 @@ func (q *Queries) PlayerSeasonScores(ctx context.Context, arg PlayerSeasonScores
 }
 
 const seasonFixtures = `-- name: SeasonFixtures :many
-SELECT m.number AS matchday, f.id, f.kickoff, f.status, f.exception,
+SELECT m.number AS matchday, f.id, f.kickoff, f.status, f.exception, f.home_score, f.away_score, f.period,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
 FROM matchdays m
 JOIN fixtures f ON f.matchday_id = m.id
@@ -875,6 +881,9 @@ type SeasonFixturesRow struct {
 	Kickoff   *time.Time
 	Status    string
 	Exception string
+	HomeScore *int16
+	AwayScore *int16
+	Period    string
 	HomeID    uuid.UUID
 	HomeName  string
 	AwayID    uuid.UUID
@@ -896,6 +905,9 @@ func (q *Queries) SeasonFixtures(ctx context.Context, seasonID uuid.UUID) ([]Sea
 			&i.Kickoff,
 			&i.Status,
 			&i.Exception,
+			&i.HomeScore,
+			&i.AwayScore,
+			&i.Period,
 			&i.HomeID,
 			&i.HomeName,
 			&i.AwayID,

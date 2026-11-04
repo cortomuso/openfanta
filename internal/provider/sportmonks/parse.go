@@ -15,7 +15,7 @@ import (
 
 // parserVersion must change whenever parsing can produce different output
 // from the same payload.
-const parserVersion = "5"
+const parserVersion = "6"
 
 // ErrParse wraps every parsing failure.
 var ErrParse = errors.New("sportmonks: cannot parse payload")
@@ -105,6 +105,23 @@ var exceptionStates = map[string]domain.Exception{
 	"INTERRUPTED": domain.ExceptionSuspended,
 	"ABANDONED":   domain.ExceptionSuspended,
 }
+
+// periods maps fixture states to how far the match has got. Other states (postponed,
+// suspended, cancelled, delayed, ...) say nothing about a period.
+var periods = map[string]domain.Period{
+	"NS": domain.PeriodNotStarted, "TBA": domain.PeriodNotStarted,
+	"INPLAY_1ST_HALF":  domain.PeriodFirstHalf,
+	"HT":               domain.PeriodHalfTime,
+	"INPLAY_2ND_HALF":  domain.PeriodSecondHalf,
+	"EXTRA_TIME_BREAK": domain.PeriodExtraTime, "INPLAY_ET": domain.PeriodExtraTime,
+	"INPLAY_ET_2ND_HALF": domain.PeriodExtraTime, "BREAK": domain.PeriodExtraTime,
+	"PEN_BREAK": domain.PeriodPenalties, "INPLAY_PENALTIES": domain.PeriodPenalties,
+	"FT": domain.PeriodFinished, "AET": domain.PeriodFinished, "FT_PEN": domain.PeriodFinished,
+}
+
+// currentScore is the description of the running or final score among a fixture's scores
+// (the others are per half, extra time and shoot-out).
+const currentScore = "CURRENT"
 
 type id = json.Number // Sportmonks IDs are integers; keep them as exact strings
 
@@ -214,6 +231,13 @@ type smFixture struct {
 		} `json:"details"`
 	} `json:"lineups"`
 	Events []smEvent `json:"events"`
+	Scores []struct {
+		Description string `json:"description"`
+		Score       struct {
+			Goals       *int   `json:"goals"`
+			Participant string `json:"participant"`
+		} `json:"score"`
+	} `json:"scores"`
 }
 
 type smEvent struct {
@@ -244,7 +268,9 @@ func ParseFixture(r provider.Raw) (provider.Fixture, error) {
 		Final:     finalStates[f.State.DeveloperName],
 		Players:   map[string]string{},
 		Exception: exceptionStates[f.State.DeveloperName],
+		Period:    periods[f.State.DeveloperName],
 	}
+	out.Score = currentScoreOf(f)
 	if f.StartingAt != nil {
 		t, err := time.Parse(time.DateTime, *f.StartingAt) // Sportmonks returns UTC
 		if err != nil {
@@ -452,4 +478,24 @@ func parseCount(raw json.RawMessage) (int64, bool) {
 		return 0, false
 	}
 	return int64(v), true
+}
+
+// currentScoreOf returns the CURRENT score, or nil unless both sides have one.
+func currentScoreOf(f smFixture) *domain.Score {
+	var home, away *int
+	for _, s := range f.Scores {
+		if s.Description != currentScore {
+			continue
+		}
+		switch s.Score.Participant {
+		case "home":
+			home = s.Score.Goals
+		case "away":
+			away = s.Score.Goals
+		}
+	}
+	if home == nil || away == nil || *home < 0 || *away < 0 {
+		return nil
+	}
+	return &domain.Score{Home: *home, Away: *away}
 }

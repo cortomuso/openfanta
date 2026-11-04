@@ -766,3 +766,20 @@ func TestPlayersListStatsAndSort(t *testing.T) {
 		t.Errorf("stats without include = %+v", p.Stats)
 	}
 }
+
+func TestFixtureResult(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	var mds struct{ Matchdays []api.Matchday }
+	f.get("/v1/seasons/"+seasons.Seasons[0].Id+"/matchdays", 200, &mds)
+	fx := mds.Matchdays[0].Fixtures[0]
+	if fx.Score == nil || fx.Score.Home != 2 || fx.Score.Away != 2 || fx.Period == nil || *fx.Period != api.Finished {
+		t.Errorf("matchday fixture = score %v period %v", fx.Score, fx.Period)
+	}
+	var runs struct{ Fixture api.Fixture }
+	f.get("/v1/fixtures/"+fx.Id+"/runs", 200, &runs)
+	if runs.Fixture.Score == nil || *runs.Fixture.Score != *fx.Score || runs.Fixture.Period == nil || *runs.Fixture.Period != api.Finished {
+		t.Errorf("fixture of the runs = %+v", runs.Fixture)
+	}
+}

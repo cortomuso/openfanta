@@ -525,6 +525,52 @@
         "rescinded": false,
         "sort_order": null
       }
+    ],
+    "scores": [
+      {
+        "id": 500101,
+        "fixture_id": 5001,
+        "type_id": 1,
+        "participant_id": 100,
+        "score": {
+          "goals": 1,
+          "participant": "home"
+        },
+        "description": "1ST_HALF"
+      },
+      {
+        "id": 500102,
+        "fixture_id": 5001,
+        "type_id": 1,
+        "participant_id": 200,
+        "score": {
+          "goals": 1,
+          "participant": "away"
+        },
+        "description": "1ST_HALF"
+      },
+      {
+        "id": 500103,
+        "fixture_id": 5001,
+        "type_id": 1525,
+        "participant_id": 100,
+        "score": {
+          "goals": 1,
+          "participant": "home"
+        },
+        "description": "CURRENT"
+      },
+      {
+        "id": 500104,
+        "fixture_id": 5001,
+        "type_id": 1525,
+        "participant_id": 200,
+        "score": {
+          "goals": 1,
+          "participant": "away"
+        },
+        "description": "CURRENT"
+      }
     ]
   },
   "subscription": [],

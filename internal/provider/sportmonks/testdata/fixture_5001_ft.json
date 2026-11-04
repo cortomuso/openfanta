@@ -10,7 +10,7 @@
     "venue_id": 1,
     "name": "Home FC vs Away FC",
     "starting_at": "2026-08-23 18:45:00",
-    "result_info": "Home FC won after full-time.",
+    "result_info": "Match drawn after full-time.",
     "leg": "1/1",
     "details": null,
     "length": 90,
@@ -1060,6 +1060,52 @@
         "detailed_period_id": null,
         "rescinded": false,
         "sort_order": null
+      }
+    ],
+    "scores": [
+      {
+        "id": 500101,
+        "fixture_id": 5001,
+        "type_id": 1,
+        "participant_id": 100,
+        "score": {
+          "goals": 1,
+          "participant": "home"
+        },
+        "description": "1ST_HALF"
+      },
+      {
+        "id": 500102,
+        "fixture_id": 5001,
+        "type_id": 1,
+        "participant_id": 200,
+        "score": {
+          "goals": 1,
+          "participant": "away"
+        },
+        "description": "1ST_HALF"
+      },
+      {
+        "id": 500103,
+        "fixture_id": 5001,
+        "type_id": 1525,
+        "participant_id": 100,
+        "score": {
+          "goals": 2,
+          "participant": "home"
+        },
+        "description": "CURRENT"
+      },
+      {
+        "id": 500104,
+        "fixture_id": 5001,
+        "type_id": 1525,
+        "participant_id": 200,
+        "score": {
+          "goals": 2,
+          "participant": "away"
+        },
+        "description": "CURRENT"
       }
     ]
   },

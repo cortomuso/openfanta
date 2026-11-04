@@ -82,6 +82,9 @@ type Fixture struct {
 	Kickoff    *time.Time
 	Status     string
 	Exception  string
+	HomeScore  *int16
+	AwayScore  *int16
+	Period     string
 }
 
 type FixtureFact struct {

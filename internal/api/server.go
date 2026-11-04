@@ -126,6 +126,21 @@ func exception(e string) *FixtureException {
 	return &v
 }
 
+// setResult fills the real result of a fixture: the score only when the provider gave one,
+// the period only when its status maps to one.
+func setResult(f *Fixture, home, away *int16, period string) {
+	if home != nil && away != nil {
+		f.Score = &struct {
+			Away int `json:"away"`
+			Home int `json:"home"`
+		}{Away: int(*away), Home: int(*home)}
+	}
+	if period != "" {
+		p := FixturePeriod(period)
+		f.Period = &p
+	}
+}
+
 // ListVotoSources implements StrictServerInterface.
 func (s *Server) ListVotoSources(_ context.Context, _ ListVotoSourcesRequestObject) (ListVotoSourcesResponseObject, error) {
 	out := ListVotoSources200JSONResponse{Default: DefaultVotoSource}
@@ -186,10 +201,12 @@ func (s *Server) ListMatchdays(ctx context.Context, req ListMatchdaysRequestObje
 			out.Matchdays = append(out.Matchdays, Matchday{Number: n, Fixtures: []Fixture{}})
 		}
 		md := &out.Matchdays[len(out.Matchdays)-1]
-		md.Fixtures = append(md.Fixtures, Fixture{
+		fx := Fixture{
 			Id: r.ID.String(), Matchday: n, Kickoff: r.Kickoff, Status: r.Status, Exception: exception(r.Exception),
 			Home: Ref{Id: r.HomeID.String(), Name: r.HomeName}, Away: Ref{Id: r.AwayID.String(), Name: r.AwayName},
-		})
+		}
+		setResult(&fx, r.HomeScore, r.AwayScore, r.Period)
+		md.Fixtures = append(md.Fixtures, fx)
 	}
 	return out, nil
 }
@@ -278,6 +295,7 @@ func (s *Server) GetFixtureRuns(ctx context.Context, req GetFixtureRunsRequestOb
 		},
 		Runs: make([]Run, 0, len(rows)),
 	}
+	setResult(&out.Fixture, f.HomeScore, f.AwayScore, f.Period)
 	for _, r := range rows {
 		run := Run{
 			Id: r.ID.String(), SettingsSha256: r.SettingsSha256, VotoSource: r.VotoSource,

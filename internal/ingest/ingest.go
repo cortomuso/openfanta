@@ -376,8 +376,14 @@ func (s *Service) upsertFixture(ctx context.Context, q *db.Queries, matchdayID u
 	}
 	home, _ := uuid.Parse(string(teamIDs[domain.TeamID(fx.Home.Ref)]))
 	away, _ := uuid.Parse(string(teamIDs[domain.TeamID(fx.Away.Ref)]))
+	var homeScore, awayScore *int16
+	if fx.Score != nil {
+		h, a := int16(fx.Score.Home), int16(fx.Score.Away)
+		homeScore, awayScore = &h, &a
+	}
 	if err := q.UpsertFixture(ctx, db.UpsertFixtureParams{
 		ID: fixtureID, MatchdayID: matchdayID, HomeTeamID: home, AwayTeamID: away, Kickoff: fx.Kickoff, Status: fx.Status, Exception: string(fx.Exception),
+		HomeScore: homeScore, AwayScore: awayScore, Period: string(fx.Period),
 	}); err != nil {
 		return uuid.Nil, domain.MatchFacts{}, err
 	}

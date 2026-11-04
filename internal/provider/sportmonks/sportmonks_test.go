@@ -258,7 +258,7 @@ func TestClientRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"/fixtures/5001?include=participants%3Blineups.details%3Bevents%3Bstate",
+		"/fixtures/5001?include=participants%3Blineups.details%3Bevents%3Bstate%3Bscores",
 		"/seasons/777?include=league.country",
 		"/schedules/seasons/777",
 	}
@@ -487,5 +487,53 @@ func TestParseSquadRejectsBadEndDate(t *testing.T) {
 	_, err := ParseSquad(provider.Raw{Key: "k", Body: []byte(`{"data":[{"player_id":1,"end":"soon"}]}`)})
 	if !errors.Is(err, ErrParse) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestParseFixtureScoreAndPeriod(t *testing.T) {
+	ft, err := ParseFixture(raw(t, "fixture_5001_ft.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ft.Score == nil || *ft.Score != (d.Score{Home: 2, Away: 2}) || ft.Period != d.PeriodFinished {
+		t.Errorf("finished: score = %v, period = %q", ft.Score, ft.Period)
+	}
+	live, err := ParseFixture(raw(t, "fixture_5001_live.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if live.Score == nil || *live.Score != (d.Score{Home: 1, Away: 1}) || live.Period != d.PeriodFirstHalf {
+		t.Errorf("in play: score = %v, period = %q", live.Score, live.Period)
+	}
+
+	// Without a CURRENT score for both sides there is no score: never a guessed 0-0.
+	base := raw(t, "fixture_5001_ft.json")
+	for name, from := range map[string]string{"no current score": `"description": "CURRENT"`} {
+		r := base
+		r.Body = bytes.ReplaceAll(base.Body, []byte(from), []byte(`"description": "2ND_HALF_ONLY"`))
+		f, err := ParseFixture(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.Score != nil {
+			t.Errorf("%s: score = %v", name, *f.Score)
+		}
+	}
+
+	for state, want := range map[string]d.Period{
+		"NS": d.PeriodNotStarted, "INPLAY_1ST_HALF": d.PeriodFirstHalf, "HT": d.PeriodHalfTime,
+		"INPLAY_2ND_HALF": d.PeriodSecondHalf, "INPLAY_ET": d.PeriodExtraTime, "PEN_BREAK": d.PeriodPenalties,
+		"FT": d.PeriodFinished, "AET": d.PeriodFinished, "FT_PEN": d.PeriodFinished,
+		"POSTPONED": d.PeriodNone, "SUSPENDED": d.PeriodNone, "CANCELLED": d.PeriodNone, "SOMETHING_NEW": d.PeriodNone,
+	} {
+		r := base
+		r.Body = bytes.Replace(base.Body, []byte(`"developer_name": "FT"`), []byte(`"developer_name": "`+state+`"`), 1)
+		f, err := ParseFixture(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.Period != want || !f.Period.Valid() {
+			t.Errorf("%s: period = %q, want %q", state, f.Period, want)
+		}
 	}
 }

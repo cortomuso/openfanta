@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -196,11 +197,32 @@ func TestLiveFixtureIsNotScoredUntilFinal(t *testing.T) {
 	up.Set("/fixtures/5001", smtest.Fixture(t, "fixture_5001_live.json"))
 	svc := newService(t, st, srv, nil)
 
+	result := func(fixtureID uuid.UUID) (string, string) {
+		t.Helper()
+		row, err := st.Queries().GetFixture(ctx, fixtureID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		score := "-"
+		if row.HomeScore != nil && row.AwayScore != nil {
+			score = strconv.Itoa(int(*row.HomeScore)) + "-" + strconv.Itoa(int(*row.AwayScore))
+		}
+		return score, row.Period
+	}
+
 	rep, _ := svc.IngestMatchday(ctx, "777", 1, Options{})
+	var id uuid.UUID
 	for _, f := range rep.Fixtures {
 		if f.Ref == "5001" && (f.Final || f.RunsCreated != 0 || f.Err != nil) {
 			t.Fatalf("live fixture = %+v", f)
 		}
+		if f.Ref == "5001" {
+			id = f.ID
+		}
+	}
+	// The live score and period are stored although nothing is scored yet.
+	if score, period := result(id); score != "1-1" || period != "first_half" {
+		t.Errorf("live result = %s %s", score, period)
 	}
 	up.Set("/fixtures/5001", ft)
 	rep, _ = svc.IngestMatchday(ctx, "777", 1, Options{})
@@ -208,6 +230,9 @@ func TestLiveFixtureIsNotScoredUntilFinal(t *testing.T) {
 		if f.Ref == "5001" && (!f.Final || f.RunsCreated != 1 || f.FromCache) {
 			t.Fatalf("finished fixture = %+v (live payloads must not be cached as final)", f)
 		}
+	}
+	if score, period := result(id); score != "2-2" || period != "finished" {
+		t.Errorf("final result = %s %s", score, period)
 	}
 }
 

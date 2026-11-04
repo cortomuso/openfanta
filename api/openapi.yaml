@@ -642,12 +642,30 @@ components:
         id: { type: string }
         matchday: { type: integer }
         kickoff: { type: string, format: date-time, nullable: true }
-        status: { type: string, description: "Provider status, e.g. FT" }
+        status: { type: string, description: "Provider status, such as NS (not started), INPLAY_1ST_HALF, HT, INPLAY_2ND_HALF, FT, AET, FT_PEN, POSTPONED, SUSPENDED" }
         exception:
           type: string
           enum: [postponed, suspended]
           nullable: true
           description: Set when the real match was postponed or suspended; the league's real-match policy applies to it.
+        period:
+          type: string
+          enum: [not_started, first_half, half_time, second_half, extra_time, penalties, finished]
+          nullable: true
+          description: |
+            How far the match has got, derived from the provider status; null when the status says
+            nothing about it (postponed, suspended, cancelled, unknown states). `extra_time` covers
+            the break before it, `penalties` the shoot-out.
+        score:
+          type: object
+          nullable: true
+          description: |
+            The provider's current score: the final one once `period` is `finished`. It includes
+            extra time and never counts a shoot-out. Null until the provider reports one.
+          required: [home, away]
+          properties:
+            home: { type: integer, minimum: 0 }
+            away: { type: integer, minimum: 0 }
         home: { $ref: "#/components/schemas/Ref" }
         away: { $ref: "#/components/schemas/Ref" }
     Matchday:

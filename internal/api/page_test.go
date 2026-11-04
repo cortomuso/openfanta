@@ -99,3 +99,22 @@ func TestPlayerFromClubHistory(t *testing.T) {
 		t.Errorf("no squad entry = %+v", nobody)
 	}
 }
+
+func TestSetResultOmitsWhatTheProviderDidNotGive(t *testing.T) {
+	var none Fixture
+	setResult(&none, nil, nil, "")
+	if none.Score != nil || none.Period != nil {
+		t.Errorf("empty result = %+v", none)
+	}
+	one := int16(1)
+	var half Fixture
+	setResult(&half, &one, nil, "")
+	if half.Score != nil {
+		t.Errorf("a score of one side only = %+v", half.Score)
+	}
+	var live Fixture
+	setResult(&live, &one, &one, "half_time")
+	if live.Score == nil || live.Score.Home != 1 || live.Period == nil || *live.Period != "half_time" {
+		t.Errorf("live = %+v", live)
+	}
+}

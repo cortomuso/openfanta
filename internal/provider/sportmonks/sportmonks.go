@@ -23,7 +23,7 @@ const Name = "sportmonks"
 const DefaultBaseURL = "https://api.sportmonks.com/v3/football"
 
 // Includes requested for a fixture: everything the parser reads.
-const fixtureIncludes = "participants;lineups.details;events;state"
+const fixtureIncludes = "participants;lineups.details;events;state;scores"
 
 // Client talks to Sportmonks.
 type Client struct {

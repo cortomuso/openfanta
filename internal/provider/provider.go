@@ -90,9 +90,13 @@ type Fixture struct {
 	Status string
 	// Exception is set when the match was postponed or suspended.
 	Exception domain.Exception
-	Kickoff   *time.Time
-	Home      Team
-	Away      Team
-	Players   map[string]string // player ref -> name
-	Facts     domain.MatchFacts
+	// Period is how far the match has got, from the provider's state.
+	Period domain.Period
+	// Score is the provider's current score; nil when it gives none.
+	Score   *domain.Score
+	Kickoff *time.Time
+	Home    Team
+	Away    Team
+	Players map[string]string // player ref -> name
+	Facts   domain.MatchFacts
 }

@@ -32,7 +32,7 @@ FROM seasons s JOIN competitions c ON c.id = s.competition_id
 WHERE s.id = $1;
 
 -- name: SeasonFixtures :many
-SELECT m.number AS matchday, f.id, f.kickoff, f.status, f.exception,
+SELECT m.number AS matchday, f.id, f.kickoff, f.status, f.exception, f.home_score, f.away_score, f.period,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
 FROM matchdays m
 JOIN fixtures f ON f.matchday_id = m.id
@@ -58,7 +58,7 @@ WHERE m.season_id = $1
 ORDER BY r.external_id;
 
 -- name: GetFixture :one
-SELECT f.id, f.kickoff, f.status, f.exception, m.number AS matchday, m.season_id,
+SELECT f.id, f.kickoff, f.status, f.exception, f.home_score, f.away_score, f.period, m.number AS matchday, m.season_id,
        h.id AS home_id, h.name AS home_name, a.id AS away_id, a.name AS away_name
 FROM fixtures f
 JOIN matchdays m ON m.id = f.matchday_id

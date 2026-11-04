@@ -473,12 +473,13 @@ func (q *Queries) UpsertCompetition(ctx context.Context, arg UpsertCompetitionPa
 }
 
 const upsertFixture = `-- name: UpsertFixture :exec
-INSERT INTO fixtures (id, matchday_id, home_team_id, away_team_id, kickoff, status, exception)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO fixtures (id, matchday_id, home_team_id, away_team_id, kickoff, status, exception, home_score, away_score, period)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (id) DO UPDATE SET
     matchday_id = EXCLUDED.matchday_id, home_team_id = EXCLUDED.home_team_id,
     away_team_id = EXCLUDED.away_team_id, kickoff = EXCLUDED.kickoff, status = EXCLUDED.status,
-    exception = EXCLUDED.exception
+    exception = EXCLUDED.exception, home_score = EXCLUDED.home_score, away_score = EXCLUDED.away_score,
+    period = EXCLUDED.period
 `
 
 type UpsertFixtureParams struct {
@@ -489,6 +490,9 @@ type UpsertFixtureParams struct {
 	Kickoff    *time.Time
 	Status     string
 	Exception  string
+	HomeScore  *int16
+	AwayScore  *int16
+	Period     string
 }
 
 func (q *Queries) UpsertFixture(ctx context.Context, arg UpsertFixtureParams) error {
@@ -500,6 +504,9 @@ func (q *Queries) UpsertFixture(ctx context.Context, arg UpsertFixtureParams) er
 		arg.Kickoff,
 		arg.Status,
 		arg.Exception,
+		arg.HomeScore,
+		arg.AwayScore,
+		arg.Period,
 	)
 	return err
 }

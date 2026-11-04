@@ -55,3 +55,11 @@ and never guesses it.
 
 Squads are stored per season, so they are also the club history. Run `openfanta squads --season S`
 after a matchday of that season is ingested.
+
+## Fixture results
+
+`ParseFixture` also fills `Fixture.Score` (the provider's current score, nil when it gives none, never
+a guessed 0-0) and `Fixture.Period` (`domain.Period`, empty when the status says nothing about it).
+Sportmonks: the `CURRENT` entry of the `scores` include for both sides, and the state mapped in
+`periods` in `parse.go`. These are stored on every ingest, finished or not, so a live match shows its
+score and period as soon as it is re-ingested.
