@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -360,7 +361,20 @@ func (s *Server) ListPlayers(ctx context.Context, req ListPlayersRequestObject) 
 	if pr.BirthYearFrom != nil && pr.BirthYearTo != nil && *pr.BirthYearFrom > *pr.BirthYearTo {
 		return bad(errors.New("birth_year_from is after birth_year_to"))
 	}
-	arg := db.ListPlayersParams{RowLimit: int32(limit) + 1}
+	sortBy := "name"
+	if pr.Sort != nil {
+		sortBy = string(*pr.Sort)
+	}
+	if sortBy != "name" && sortBy != "avg_voto" && sortBy != "avg_fantavoto" {
+		return bad(fmt.Errorf("sort %q is not one of name, avg_voto, avg_fantavoto", sortBy))
+	}
+	if pr.Include != nil && *pr.Include != "stats" {
+		return bad(fmt.Errorf("include %q is not stats", *pr.Include))
+	}
+	arg := db.ListPlayersParams{
+		RowLimit: int32(limit) + 1, Sort: sortBy,
+		SettingsSha256: settings.Classic().SHA256, VotoSource: or(pr.VotoSource, DefaultVotoSource),
+	}
 	if pr.Q != nil && *pr.Q != "" {
 		p := likePattern(*pr.Q)
 		arg.NamePattern = &p
@@ -382,12 +396,20 @@ func (s *Server) ListPlayers(ctx context.Context, req ListPlayersRequestObject) 
 		arg.BirthTo = &v
 	}
 	if pr.Cursor != nil && *pr.Cursor != "" {
-		name, idText, err := decodeKeyset(*pr.Cursor)
+		sortText, name, idText, err := decodeKeyset(*pr.Cursor)
 		id, perr := uuid.Parse(idText)
 		if err != nil || perr != nil {
 			return bad(errBadCursor)
 		}
 		arg.AfterName, arg.AfterID = &name, &id
+		if sortText != "" {
+			v, err := strconv.ParseInt(sortText, 10, 32)
+			if err != nil {
+				return bad(errBadCursor)
+			}
+			v32 := int32(v)
+			arg.AfterSort = &v32
+		}
 	}
 	rows, err := s.q.ListPlayers(ctx, arg)
 	if err != nil {
@@ -397,7 +419,18 @@ func (s *Server) ListPlayers(ctx context.Context, req ListPlayersRequestObject) 
 	if len(rows) > limit {
 		rows = rows[:limit]
 		last := rows[limit-1]
-		c := encodeKeyset(last.Name, last.ID.String())
+		var sortValue *int32
+		switch sortBy {
+		case "avg_voto":
+			sortValue = last.AvgVoto
+		case "avg_fantavoto":
+			sortValue = last.AvgFantavoto
+		}
+		sv := ""
+		if sortValue != nil {
+			sv = strconv.Itoa(int(*sortValue))
+		}
+		c := encodeKeyset(sv, last.Name, last.ID.String())
 		out.NextCursor = &c
 	}
 	for _, r := range rows {
@@ -412,9 +445,76 @@ func (s *Server) ListPlayers(ctx context.Context, req ListPlayersRequestObject) 
 		if r.Listed != nil {
 			ps.Status = squadStatus(*r.Listed)
 		}
+		if pr.Include != nil && r.SeasonID != nil {
+			st := seasonStats(*r.SeasonID, listStats(r))
+			ps.Stats = &st
+		}
 		out.Players = append(out.Players, ps)
 	}
 	return out, nil
+}
+
+// listStats reads the season aggregates of a list row; a player with no scores has none, which
+// shows as zeros and null averages.
+func listStats(r db.ListPlayersRow) db.PlayerSeasonStat {
+	n := func(v *int32) int32 {
+		if v == nil {
+			return 0
+		}
+		return *v
+	}
+	return db.PlayerSeasonStat{
+		Appearances: n(r.Appearances), Minutes: n(r.Minutes), GamesWithVoto: n(r.GamesWithVoto),
+		AvgVoto: r.AvgVoto, AvgFantavoto: r.AvgFantavoto,
+		Goals: n(r.Goals), PenaltiesScored: n(r.PenaltiesScored), PenaltiesMissed: n(r.PenaltiesMissed),
+		PenaltiesSaved: n(r.PenaltiesSaved), OwnGoals: n(r.OwnGoals), Assists: n(r.Assists),
+		AssistsSetPiece: n(r.AssistsSetPiece), AssistsContribution: n(r.AssistsContribution),
+		YellowCards: n(r.YellowCards), SentOff: n(r.SentOff), GoalsConceded: n(r.GoalsConceded),
+		CleanSheets: n(r.CleanSheets), DecisiveGoalsWin: n(r.DecisiveGoalsWin),
+		DecisiveGoalsDraw: n(r.DecisiveGoalsDraw), PlayerOfTheMatch: n(r.PlayerOfTheMatch),
+	}
+}
+
+func seasonStats(seasonID uuid.UUID, r db.PlayerSeasonStat) SeasonStats {
+	out := SeasonStats{
+		Appearances: int(r.Appearances), Minutes: int(r.Minutes), GamesWithVoto: int(r.GamesWithVoto),
+		AvgVoto: decimal(r.AvgVoto), AvgFantavoto: decimal(r.AvgFantavoto),
+		Totals: StatTotals{
+			Goals: int(r.Goals), PenaltiesScored: int(r.PenaltiesScored), PenaltiesMissed: int(r.PenaltiesMissed),
+			PenaltiesSaved: int(r.PenaltiesSaved), OwnGoals: int(r.OwnGoals), Assists: int(r.Assists),
+			AssistsSetPiece: int(r.AssistsSetPiece), AssistsContribution: int(r.AssistsContribution),
+			YellowCards: int(r.YellowCards), SentOff: int(r.SentOff), GoalsConceded: int(r.GoalsConceded),
+			CleanSheets: int(r.CleanSheets), DecisiveGoalsWin: int(r.DecisiveGoalsWin),
+			DecisiveGoalsDraw: int(r.DecisiveGoalsDraw), PlayerOfTheMatch: int(r.PlayerOfTheMatch),
+		},
+	}
+	out.Season.Id = seasonID.String()
+	return out
+}
+
+// GetPlayerSeasonStats implements StrictServerInterface.
+func (s *Server) GetPlayerSeasonStats(ctx context.Context, req GetPlayerSeasonStatsRequestObject) (GetPlayerSeasonStatsResponseObject, error) {
+	rs, vs := settings.Classic().SHA256, or(req.Params.VotoSource, DefaultVotoSource)
+	if _, err := s.q.GetSeason(ctx, req.SeasonId); errors.Is(err, pgx.ErrNoRows) {
+		return GetPlayerSeasonStats404ApplicationProblemPlusJSONResponse(notFound("season %s not found", req.SeasonId)), nil
+	} else if err != nil {
+		return nil, err
+	}
+	p, err := s.q.GetPlayer(ctx, req.PlayerId)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return GetPlayerSeasonStats404ApplicationProblemPlusJSONResponse(notFound("player %s not found", req.PlayerId)), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.q.GetPlayerSeasonStats(ctx, db.GetPlayerSeasonStatsParams{PlayerID: req.PlayerId, SeasonID: req.SeasonId, SettingsSha256: rs, VotoSource: vs})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	return GetPlayerSeasonStats200JSONResponse{
+		Player: Ref{Id: p.ID.String(), Name: p.Name}, SettingsSha256: rs, VotoSource: vs,
+		Stats: seasonStats(req.SeasonId, row), // no row: zeros and null averages
+	}, nil
 }
 
 // ListClubs implements StrictServerInterface.

@@ -115,21 +115,46 @@ ORDER BY s.name DESC, s.id DESC;
 
 -- name: ListPlayers :many
 -- Players with the club, role and status of one season: the requested one, else each player's
--- latest. A requested season also keeps only players listed in it. Keyset order (name, id): the
--- after_* pair is the last row of the previous page.
-SELECT p.id, p.name, p.birth_year, ps.team_id AS club_id, t.name AS club_name, ps.role, ps.listed
-FROM players p
-LEFT JOIN player_seasons ps ON ps.player_id = p.id AND ps.season_id = COALESCE(
-    sqlc.narg(season_id)::uuid,
-    (SELECT x.season_id FROM player_seasons x JOIN seasons s ON s.id = x.season_id
-     WHERE x.player_id = p.id ORDER BY s.name DESC, s.id DESC LIMIT 1))
-LEFT JOIN teams t ON t.id = ps.team_id
-WHERE (sqlc.narg(name_pattern)::text IS NULL OR p.name ILIKE sqlc.narg(name_pattern)::text ESCAPE '\')
-  AND (sqlc.narg(role)::text IS NULL OR ps.role = sqlc.narg(role)::text)
-  AND (sqlc.narg(club_id)::uuid IS NULL OR ps.team_id = sqlc.narg(club_id)::uuid)
-  AND (sqlc.narg(season_id)::uuid IS NULL OR ps.player_id IS NOT NULL)
-  AND (sqlc.narg(birth_from)::int IS NULL OR p.birth_year >= sqlc.narg(birth_from)::int)
-  AND (sqlc.narg(birth_to)::int IS NULL OR p.birth_year <= sqlc.narg(birth_to)::int)
-  AND (sqlc.narg(after_name)::text IS NULL OR (p.name, p.id) > (sqlc.narg(after_name)::text, sqlc.narg(after_id)::uuid))
-ORDER BY p.name, p.id
+-- latest. A requested season also keeps only players listed in it. The statistics are those of
+-- that same season under the given settings and voto source. Order: the sort value (an average,
+-- highest first, players without one last; NULL throughout for the name sort), then name, then id.
+-- The after_* values are the last row of the previous page; after_name is NULL on the first page
+-- and after_sort is NULL when that last row had no sort value.
+WITH entries AS (
+    SELECT p.id, p.name, p.birth_year, ps.season_id, ps.team_id AS club_id, t.name AS club_name, ps.role, ps.listed
+    FROM players p
+    LEFT JOIN player_seasons ps ON ps.player_id = p.id AND ps.season_id = COALESCE(
+        sqlc.narg(season_id)::uuid,
+        (SELECT x.season_id FROM player_seasons x JOIN seasons s ON s.id = x.season_id
+         WHERE x.player_id = p.id ORDER BY s.name DESC, s.id DESC LIMIT 1))
+    LEFT JOIN teams t ON t.id = ps.team_id
+    WHERE (sqlc.narg(name_pattern)::text IS NULL OR p.name ILIKE sqlc.narg(name_pattern)::text ESCAPE '\')
+      AND (sqlc.narg(role)::text IS NULL OR ps.role = sqlc.narg(role)::text)
+      AND (sqlc.narg(club_id)::uuid IS NULL OR ps.team_id = sqlc.narg(club_id)::uuid)
+      AND (sqlc.narg(season_id)::uuid IS NULL OR ps.player_id IS NOT NULL)
+      AND (sqlc.narg(birth_from)::int IS NULL OR p.birth_year >= sqlc.narg(birth_from)::int)
+      AND (sqlc.narg(birth_to)::int IS NULL OR p.birth_year <= sqlc.narg(birth_to)::int)
+), ranked AS (
+    SELECT e.*, st.appearances, st.minutes, st.games_with_voto, st.avg_voto, st.avg_fantavoto,
+           st.goals, st.penalties_scored, st.penalties_missed, st.penalties_saved, st.own_goals,
+           st.assists, st.assists_set_piece, st.assists_contribution, st.yellow_cards, st.sent_off,
+           st.goals_conceded, st.clean_sheets, st.decisive_goals_win, st.decisive_goals_draw, st.player_of_the_match,
+           (CASE sqlc.arg(sort)::text WHEN 'avg_voto' THEN st.avg_voto WHEN 'avg_fantavoto' THEN st.avg_fantavoto END)::int AS sort_value
+    FROM entries e
+    LEFT JOIN player_season_stats st ON st.player_id = e.id AND st.season_id = e.season_id
+         AND st.settings_sha256 = sqlc.arg(settings_sha256)::text AND st.voto_source = sqlc.arg(voto_source)::text
+)
+SELECT r.id, r.name, r.birth_year, r.season_id, r.club_id, r.club_name, r.role, r.listed, r.appearances, r.minutes, r.games_with_voto, r.avg_voto, r.avg_fantavoto, r.goals, r.penalties_scored, r.penalties_missed, r.penalties_saved, r.own_goals, r.assists, r.assists_set_piece, r.assists_contribution, r.yellow_cards, r.sent_off, r.goals_conceded, r.clean_sheets, r.decisive_goals_win, r.decisive_goals_draw, r.player_of_the_match
+FROM ranked r
+WHERE sqlc.narg(after_name)::text IS NULL
+   OR CASE WHEN sqlc.narg(after_sort)::int IS NULL
+           THEN r.sort_value IS NULL AND (r.name, r.id) > (sqlc.narg(after_name)::text, sqlc.narg(after_id)::uuid)
+           ELSE r.sort_value IS NULL OR r.sort_value < sqlc.narg(after_sort)::int
+                OR (r.sort_value = sqlc.narg(after_sort)::int AND (r.name, r.id) > (sqlc.narg(after_name)::text, sqlc.narg(after_id)::uuid))
+      END
+ORDER BY r.sort_value DESC NULLS LAST, r.name, r.id
 LIMIT sqlc.arg(row_limit)::int;
+
+-- name: GetPlayerSeasonStats :one
+SELECT * FROM player_season_stats
+WHERE player_id = $1 AND season_id = $2 AND settings_sha256 = $3 AND voto_source = $4;

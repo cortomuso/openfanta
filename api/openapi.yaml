@@ -208,6 +208,36 @@ paths:
           $ref: "#/components/responses/Problem"
         "404":
           $ref: "#/components/responses/Problem"
+  /v1/seasons/{seasonId}/players/{playerId}/stats:
+    get:
+      tags: [scores]
+      operationId: getPlayerSeasonStats
+      summary: A player's season statistics
+      description: |
+        Averages and totals over the player's current scores in the season, under the default
+        settings. A player with no scores in the season gets zeros and null averages. League
+        settings will scope this per league once leagues score under their own (M2).
+      parameters:
+        - $ref: "#/components/parameters/SeasonId"
+        - $ref: "#/components/parameters/PlayerId"
+        - $ref: "#/components/parameters/VotoSourceQuery"
+      responses:
+        "200":
+          description: The statistics.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [player, settings_sha256, voto_source, stats]
+                properties:
+                  player: { $ref: "#/components/schemas/Ref" }
+                  settings_sha256: { type: string }
+                  voto_source: { type: string }
+                  stats: { $ref: "#/components/schemas/SeasonStats" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
   /v1/fixtures/{fixtureId}/scores:
     get:
       tags: [scores]
@@ -283,7 +313,11 @@ paths:
         player's latest season. `role` and `club` therefore match the squad entry of that season,
         and `season` keeps only players listed in it. Players no squad has named are only found
         without `role`, `club` and `season`. A page is 50 players unless `limit` says otherwise.
-        Sorting by statistics comes with the season statistics (#149).
+
+        `sort` is `name` (default) or an average, `avg_voto` or `avg_fantavoto`, highest first with
+        players that have none last; ties go by name. Averages are those of the season described
+        above, under the default settings and the `voto_source`. `include=stats` adds each
+        player's `stats` for that season.
       parameters:
         - { name: q, in: query, description: Case-insensitive text in the name., schema: { type: string, minLength: 1, maxLength: 100 } }
         - { name: role, in: query, schema: { $ref: "#/components/schemas/PlayerRole" } }
@@ -291,7 +325,9 @@ paths:
         - { name: season, in: query, description: A season id., schema: { type: string, format: uuid } }
         - { name: birth_year_from, in: query, schema: { type: integer, minimum: 1900, maximum: 2100 } }
         - { name: birth_year_to, in: query, schema: { type: integer, minimum: 1900, maximum: 2100 } }
-        - { name: sort, in: query, schema: { type: string, enum: [name], default: name } }
+        - { name: sort, in: query, schema: { type: string, enum: [name, avg_voto, avg_fantavoto], default: name } }
+        - { name: include, in: query, schema: { type: string, enum: [stats] } }
+        - $ref: "#/components/parameters/VotoSourceQuery"
         - name: limit
           in: query
           description: Page size, 1 to 200; 50 when omitted.
@@ -500,6 +536,51 @@ components:
           nullable: true
         birth_year: { type: integer, nullable: true }
         status: { $ref: "#/components/schemas/PlayerStatus" }
+        stats:
+          allOf: [{ $ref: "#/components/schemas/SeasonStats" }]
+          nullable: true
+          description: Only with `include=stats`; null for a player with no season to measure.
+    SeasonStats:
+      type: object
+      required: [season, appearances, minutes, games_with_voto, avg_voto, avg_fantavoto, totals]
+      properties:
+        season:
+          type: object
+          required: [id]
+          properties:
+            id: { type: string }
+        appearances: { type: integer, minimum: 0, description: Matches with minutes on the pitch. }
+        minutes: { type: integer, minimum: 0 }
+        games_with_voto: { type: integer, minimum: 0, description: "Matches with a voto, a voto d'ufficio included." }
+        avg_voto:
+          allOf: [{ $ref: "#/components/schemas/Decimal" }]
+          nullable: true
+          description: Mean voto over the games with voto, rounded half up; null without any.
+        avg_fantavoto:
+          allOf: [{ $ref: "#/components/schemas/Decimal" }]
+          nullable: true
+          description: Mean fantavoto over the games with voto, rounded half up; null without any.
+        totals: { $ref: "#/components/schemas/StatTotals" }
+    StatTotals:
+      type: object
+      description: Sums of the match stats (see PlayerMatchStats) over the season.
+      required: [goals, penalties_scored, penalties_missed, penalties_saved, own_goals, assists, assists_set_piece, assists_contribution, yellow_cards, sent_off, goals_conceded, clean_sheets, decisive_goals_win, decisive_goals_draw, player_of_the_match]
+      properties:
+        goals: { type: integer, minimum: 0 }
+        penalties_scored: { type: integer, minimum: 0 }
+        penalties_missed: { type: integer, minimum: 0 }
+        penalties_saved: { type: integer, minimum: 0 }
+        own_goals: { type: integer, minimum: 0 }
+        assists: { type: integer, minimum: 0 }
+        assists_set_piece: { type: integer, minimum: 0 }
+        assists_contribution: { type: integer, minimum: 0 }
+        yellow_cards: { type: integer, minimum: 0 }
+        sent_off: { type: integer, minimum: 0, description: Matches in which the player was sent off. }
+        goals_conceded: { type: integer, minimum: 0 }
+        clean_sheets: { type: integer, minimum: 0 }
+        decisive_goals_win: { type: integer, minimum: 0 }
+        decisive_goals_draw: { type: integer, minimum: 0 }
+        player_of_the_match: { type: integer, minimum: 0 }
     ClubSeason:
       type: object
       required: [season, club, roles, status]

@@ -644,3 +644,125 @@ func TestPlayersListErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestPlayerSeasonStats(t *testing.T) {
+	f := setup(t)
+	var seasons struct{ Seasons []api.Season }
+	f.get("/v1/seasons", 200, &seasons)
+	season := seasons.Seasons[0].Id
+	var list api.ScoreList
+	f.get("/v1/seasons/"+season+"/matchdays/1/scores", 200, &list)
+
+	type stats struct {
+		Player api.Ref
+		Stats  api.SeasonStats
+	}
+	for _, sc := range list.Scores {
+		var got stats
+		f.get("/v1/seasons/"+season+"/players/"+sc.Player.Id+"/stats", 200, &got)
+		st := got.Stats
+		// One matchday ingested: the aggregates are that one score.
+		if st.GamesWithVoto != map[bool]int{true: 0, false: 1}[sc.Voto == nil] ||
+			(sc.Voto == nil) != (st.AvgVoto == nil) || (sc.Voto != nil && *st.AvgVoto != *sc.Voto) ||
+			(sc.Fantavoto != nil && (st.AvgFantavoto == nil || *st.AvgFantavoto != *sc.Fantavoto)) {
+			t.Errorf("%s: stats %+v vs score voto=%v fantavoto=%v", sc.Player.Name, st, sc.Voto, sc.Fantavoto)
+		}
+		if st.Totals.Goals != sc.Stats.Goals || st.Totals.Assists != sc.Stats.Assists || st.Minutes != sc.Minutes ||
+			st.Totals.YellowCards != sc.Stats.YellowCards || st.Totals.GoalsConceded != sc.Stats.GoalsConceded {
+			t.Errorf("%s: totals %+v vs stats %+v", sc.Player.Name, st.Totals, sc.Stats)
+		}
+		if st.Season.Id != season || got.Player.Id != sc.Player.Id {
+			t.Errorf("%s: ids %+v", sc.Player.Name, got)
+		}
+	}
+
+	// A player of the squad with no scores has zeros and no averages, not an error.
+	var none stats
+	departed := f.playersFull("q=Home%20Departed")[0]
+	f.get("/v1/seasons/"+season+"/players/"+departed.Id+"/stats", 200, &none)
+	if none.Stats.Appearances != 0 || none.Stats.AvgVoto != nil || none.Stats.AvgFantavoto != nil || none.Stats.Totals.Goals != 0 {
+		t.Errorf("player without scores = %+v", none)
+	}
+
+	f.get("/v1/seasons/0190a0a0-0000-7000-8000-000000000009/players/"+departed.Id+"/stats", 404, nil)
+	f.get("/v1/seasons/"+season+"/players/0190a0a0-0000-7000-8000-000000000009/stats", 404, nil)
+	f.get("/v1/seasons/"+season+"/players/nope/stats", 400, nil)
+
+	// The ETag middleware answers a repeat request with 304.
+	path := "/v1/seasons/" + season + "/players/" + departed.Id + "/stats"
+	rec := f.get(path, 200, nil)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("If-None-Match", rec.Header().Get("ETag"))
+	again := httptest.NewRecorder()
+	f.h.ServeHTTP(again, req)
+	if rec.Header().Get("ETag") == "" || again.Code != http.StatusNotModified {
+		t.Errorf("ETag %q, repeat = %d", rec.Header().Get("ETag"), again.Code)
+	}
+}
+
+func TestPlayersListStatsAndSort(t *testing.T) {
+	f := setup(t)
+	byVoto := f.playersFull("include=stats&sort=avg_fantavoto")
+	if len(byVoto) != 15 {
+		t.Fatalf("%d players", len(byVoto))
+	}
+	seenNone := false
+	for i, p := range byVoto {
+		if p.Stats == nil && p.Status != api.Unknown {
+			t.Errorf("%s: no stats although listed", p.Name)
+		}
+		var avg *string
+		if p.Stats != nil {
+			avg = p.Stats.AvgFantavoto
+		}
+		if avg == nil {
+			seenNone = true
+			continue
+		}
+		if seenNone {
+			t.Errorf("%s has an average after players without one", p.Name)
+		}
+		if i > 0 && byVoto[i-1].Stats != nil && byVoto[i-1].Stats.AvgFantavoto != nil {
+			prev, cur := *byVoto[i-1].Stats.AvgFantavoto, *avg
+			if len(prev) == len(cur) && prev < cur {
+				t.Errorf("order: %s (%s) before %s (%s)", byVoto[i-1].Name, prev, p.Name, cur)
+			}
+		}
+	}
+	if byVoto[0].Stats == nil || byVoto[0].Stats.AvgFantavoto == nil {
+		t.Fatalf("top player has no average: %+v", byVoto[0])
+	}
+
+	for _, sortBy := range []string{"avg_voto", "avg_fantavoto", "name"} {
+		var want, got []string
+		for _, p := range f.playersFull("sort=" + sortBy) {
+			want = append(want, p.Name)
+		}
+		cursor := ""
+		for i := 0; ; i++ {
+			if i > 20 {
+				t.Fatalf("sort %s: paging does not end", sortBy)
+			}
+			q := "sort=" + sortBy + "&limit=4"
+			if cursor != "" {
+				q += "&cursor=" + cursor
+			}
+			var page playerPage
+			f.get("/v1/players?"+q, 200, &page)
+			for _, p := range page.Players {
+				got = append(got, p.Name)
+			}
+			if page.NextCursor == nil {
+				break
+			}
+			cursor = *page.NextCursor
+		}
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("sort %s: pages walk %v, want %v", sortBy, got, want)
+		}
+	}
+	f.get("/v1/players?sort=goals", 400, nil)
+	if p := f.playersFull("")[0]; p.Stats != nil {
+		t.Errorf("stats without include = %+v", p.Stats)
+	}
+}

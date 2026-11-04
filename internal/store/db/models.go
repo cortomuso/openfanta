@@ -150,6 +150,33 @@ type PlayerSeason struct {
 	Listed   bool
 }
 
+type PlayerSeasonStat struct {
+	PlayerID            uuid.UUID
+	SeasonID            uuid.UUID
+	SettingsSha256      string
+	VotoSource          string
+	Appearances         int32
+	Minutes             int32
+	GamesWithVoto       int32
+	AvgVoto             *int32
+	AvgFantavoto        *int32
+	Goals               int32
+	PenaltiesScored     int32
+	PenaltiesMissed     int32
+	PenaltiesSaved      int32
+	OwnGoals            int32
+	Assists             int32
+	AssistsSetPiece     int32
+	AssistsContribution int32
+	YellowCards         int32
+	SentOff             int32
+	GoalsConceded       int32
+	CleanSheets         int32
+	DecisiveGoalsWin    int32
+	DecisiveGoalsDraw   int32
+	PlayerOfTheMatch    int32
+}
+
 type ProviderRef struct {
 	Provider   string
 	Entity     string

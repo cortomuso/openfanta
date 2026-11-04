@@ -13,6 +13,7 @@ GET /v1/seasons
 GET /v1/seasons/{seasonId}/matchdays
 GET /v1/seasons/{seasonId}/matchdays/{n}/scores?voto_source=provider-rating
 GET /v1/seasons/{seasonId}/players/{playerId}/scores
+GET /v1/seasons/{seasonId}/players/{playerId}/stats
 GET /v1/fixtures/{fixtureId}/scores
 GET /v1/fixtures/{fixtureId}/runs
 GET /v1/players?q=&role=&club=&season=&birth_year_from=&birth_year_to=

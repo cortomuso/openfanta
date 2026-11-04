@@ -76,22 +76,25 @@ func paginate[T any](rows []T, key func(T) string, limit *int, cursor *string) (
 // `limit` must not read the whole table.
 const DefaultPageSize = 50
 
-// keysetSep separates the sort value from the id inside a keyset cursor. Names never hold NUL.
+// keysetSep separates the parts of a keyset cursor. Names never hold NUL.
 const keysetSep = "\x00"
 
-func encodeKeyset(sortValue, id string) string { return encodeCursor(sortValue + keysetSep + id) }
+// encodeKeyset names the last row of a page: its sort value ("" when it has none), name and id.
+func encodeKeyset(sortValue, name, id string) string {
+	return encodeCursor(sortValue + keysetSep + name + keysetSep + id)
+}
 
-// decodeKeyset returns the sort value and id a keyset cursor names.
-func decodeKeyset(c string) (sortValue, id string, err error) {
+// decodeKeyset returns the sort value, name and id a keyset cursor names.
+func decodeKeyset(c string) (sortValue, name, id string, err error) {
 	key, err := decodeCursor(c)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	sortValue, id, ok := strings.Cut(key, keysetSep)
-	if !ok || id == "" {
-		return "", "", errBadCursor
+	parts := strings.Split(key, keysetSep)
+	if len(parts) != 3 || parts[2] == "" {
+		return "", "", "", errBadCursor
 	}
-	return sortValue, id, nil
+	return parts[0], parts[1], parts[2], nil
 }
 
 // likePattern turns text into a case-insensitive "contains" pattern for ILIKE ... ESCAPE '\'.
