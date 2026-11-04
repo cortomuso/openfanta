@@ -17,6 +17,7 @@
             go
             gopls
             golangci-lint
+            gitleaks
             sqlc
             goose
             oapi-codegen
