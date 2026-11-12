@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="OpenFanta logo" width="96">
+  <img src="docs/assets/logo.png" alt="OpenFanta logo" width="96">
 </p>
 
 <h1 align="center">OpenFanta</h1>
