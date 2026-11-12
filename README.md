@@ -1,62 +1,91 @@
-# OpenFanta
+<h1 align="center">OpenFanta</h1>
 
-OpenFanta is an open fantacalcio data framework. It ingests raw football data from a
-third-party provider, computes **voti** and **fantavoti** from league settings defined as data, and
-serves them over a read-only HTTP API that any client can consume.
+<p align="center">
+  <b>Open, auditable fantacalcio.</b><br>
+  Raw football data in, voti and fantavoti out, over a read-only REST API.
+</p>
 
-This first version covers the Fantavoti engine with **Classic** rules, one provider
-(**Sportmonks**), Postgres storage with auditable recomputation, and a REST API.
-Architecture and decisions: [docs/design.md](docs/design.md).
+<p align="center">
+  <a href="https://github.com/cortomuso/openfanta/actions/workflows/docs.yml"><img alt="docs" src="https://github.com/cortomuso/openfanta/actions/workflows/docs.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
+  <img alt="Go" src="https://img.shields.io/badge/built%20with-Go-00ADD8">
+</p>
+
+<p align="center">
+  <a href="https://cortomuso.github.io/openfanta/">Documentation</a> ·
+  <a href="https://cortomuso.github.io/openfanta/api/">API reference</a> ·
+  <a href="docs/design.md">Design note</a> ·
+  <a href="#roadmap">Roadmap</a>
+</p>
+
+## What is OpenFanta?
+
+OpenFanta ingests raw football data from a third-party provider, computes **voti** and
+**fantavoti** from league settings defined as data, and serves the results over a read-only HTTP
+API that any client can consume. Serie A first, Classic rules first.
 
 ```
-provider (HTTP, cache, rate limit) → raw_payloads → parser → MatchFacts
-    → timeline → engine (+ settings, + voti) → versioned runs → REST API
+provider → raw payloads → MatchFacts → engine (+ settings, + voti) → versioned runs → REST API
 ```
 
+## Why?
 
-**Documentation: <https://cortomuso.github.io/openfanta/>** (sources in [`docs/`](docs/), built from [`website/`](website/)).
+Fantacalcio runs on scores nobody can check. Voti come from closed sources, the rules live inside
+each app, and two apps can give the same league two different results. Every new client has to
+rebuild the scoring from scratch.
 
-## Quick start
+OpenFanta makes the scoring a shared, open layer:
 
-Requirements: [Nix](https://nixos.org) with flakes enabled. Docker is optional.
+- **Rules are data, not code.** A league's bonuses and maluses are a settings document anyone can read and diff.
+- **Same input, same result.** Scoring is deterministic integer arithmetic, so every client and every member sees identical numbers.
+- **Nothing is overwritten.** Raw payloads are append-only and every computation is a versioned, hashed run, so a number can always be traced back to its inputs.
+
+## Highlights
+
+- **Pluggable voto sources**: the provider's rating, OpenFanta's own model built from match events and stats, or the average of both.
+- **Provider-agnostic core**: a pure engine over normalized match facts. Sportmonks is the first provider, [adding another](docs/guides/adding-a-provider.md) is a contained job.
+- **Auditable recomputation**: change a setting or a model and recompute without losing the old results.
+- **Spec-first API**: a versioned `/v1` REST API described by an [OpenAPI document](api/openapi.yaml).
+- **One static binary**: `serve`, `ingest`, `recompute` and `migrate`, backed by Postgres.
+
+## Try it
 
 ```sh
-nix develop          # or: direnv allow. Pins Go, Postgres, sqlc, oapi-codegen, golangci-lint
-make test            # unit tests; database tests are skipped
-make test-all        # every test, against a throwaway local Postgres in .pgdata/
-make lint
+docker compose up -d
+docker compose run --rm api ingest --season <season-id> --matchday 1   # needs a Sportmonks token
+curl localhost:8080/v1/seasons
 ```
 
-`make test-all` starts Postgres from the devshell on port 5433 (`make pg-stop` stops it).
-Running the server, configuration and the CLI are covered in [Getting started](docs/getting-started.md).
+Setup, configuration and the CLI: [Getting started](https://cortomuso.github.io/openfanta/getting-started/).
 
 ## Documentation
 
-| Topic | Where |
-|---|---|
-| Run, configure, CLI | [docs/getting-started.md](docs/getting-started.md) |
-| API conventions and spec | [docs/api-overview.md](docs/api-overview.md), [`api/openapi.yaml`](api/openapi.yaml) |
-| League settings, changing values | [docs/settings.md](docs/settings.md), [docs/guides/changing-default-settings.md](docs/guides/changing-default-settings.md) |
-| Voto sources, the openfanta-stat model | [docs/guides/voto-sources.md](docs/guides/voto-sources.md) |
-| Adding a data provider | [docs/guides/adding-a-provider.md](docs/guides/adding-a-provider.md) |
-| Project layout | [docs/project-layout.md](docs/project-layout.md) |
-| Design, decisions, open questions | [docs/design.md](docs/design.md) |
+Everything lives on the **[documentation site](https://cortomuso.github.io/openfanta/)**. Good places to start:
 
-Preview the site locally with `make docs-dev` (needs Node, provided by `nix develop`).
+- [Getting started](docs/getting-started.md): run it, configure it, use the CLI
+- [API overview](docs/api-overview.md) and the [OpenAPI spec](api/openapi.yaml)
+- [League settings](docs/settings.md) and [changing the defaults](docs/guides/changing-default-settings.md)
+- [Voto sources](docs/guides/voto-sources.md): how voti are produced
+- [Design note](docs/design.md): architecture, decisions, open questions
+- [Project layout](docs/project-layout.md)
 
-## Roadmap: leagues
+## Roadmap
 
-The server will host leagues and compute every league's fantavoti from its own settings, so all
-members get identical results whatever client they use. The design (settings format, audit log,
-matchday lifecycle, auth) is in [docs/design.md](docs/design.md) §8–10, backed by the research in
-[docs/research/league-settings/](docs/research/league-settings/report.md).
+**Today:** the Fantavoti engine with Classic rules, Sportmonks ingestion, auditable Postgres
+storage and the read-only API.
 
-## Status and open questions
+**Next: leagues.** The server will host leagues and compute every league's fantavoti from its own
+settings, so all members get identical results whatever client they use. Settings format, audit log,
+matchday lifecycle and auth are designed in [design §8–10](docs/design.md), backed by the
+[league settings research](docs/research/league-settings/report.md).
 
-See section 7 of [docs/design.md](docs/design.md). In short: the Sportmonks test fixtures are
-synthetic (see their README) until a real token is available, and voti currently come from the
-provider's player rating.
+Open questions, including provider data-redistribution terms, are tracked in the
+[design note](docs/design.md).
+
+## Contributing
+
+Dev environment (Nix) and test commands are in [Getting started](docs/getting-started.md).
 
 ## License
 
-[AGPL-3.0](LICENSE).
+[AGPL-3.0](LICENSE)
